@@ -5,9 +5,6 @@
 #include <vector>
 #include <zlib.h>
 
-#include <array>
-#include <future>
-
 #include "exgraf/http/client.hpp"
 #include "exgraf/model.hpp"
 #include "exgraf/tensor.hpp"
@@ -18,8 +15,6 @@ namespace ExGraf::MNIST {
 
 inline auto decompress_gzip(const std::vector<unsigned char> &input)
 		-> std::vector<unsigned char> {
-	// Minimal in-memory zlib inflate for GZip data
-	// If your data is not GZip, skip this step
 	z_stream strm{};
 	strm.avail_in = static_cast<uInt>(input.size());
 	strm.next_in =

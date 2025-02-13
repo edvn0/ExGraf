@@ -5,23 +5,17 @@
 #include <cassert>
 #include <cmath>
 #include <cstddef>
-#include <cstdint>
-#include <functional>
 #include <memory>
-#include <numeric>
-
-#include <unordered_map>
-#include <vector>
 
 using namespace ExGraf;
 
 auto main() -> int {
 	using T = double;
-	std::size_t batch_size = 32;
+	std::size_t batch_size = 128;
 	std::size_t input_dim = 784; // 28*28
 	std::size_t hidden_dim = 256;
 	std::size_t num_classes = 10;
-	std::size_t epochs = 10;
+	std::size_t epochs = 1;
 
 	try {
 		auto &&[train_images, train_labels] =

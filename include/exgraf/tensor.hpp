@@ -38,4 +38,5 @@ public:
 		grad->data->zeros();
 	}
 };
+
 } // namespace ExGraf

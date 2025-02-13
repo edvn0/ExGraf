@@ -46,14 +46,18 @@ private:
 	auto update_gradients(Node &node, const std::vector<Tensor<T>> &grad_outputs)
 			-> void {
 		const auto size = node.inputs.size();
-		for (std::size_t i = 0; i < size; ++i) {
-			auto &input = *node.inputs[i];
-			if (!tensor_to_node_idx.contains(&input)) {
-				continue;
+		for (std::size_t j = 0; j < size; ++j) {
+			auto *inp = node.inputs[j];
+			auto it = tensor_to_node_idx.find(inp);
+
+			if (it != tensor_to_node_idx.end()) {
+				auto &inp_node = nodes[it->second];
+				if (!inp_node.output.grad) {
+					inp_node.output.grad =
+							std::make_shared<Tensor<T>>(inp_node.output.shape);
+				}
+				*inp_node.output.grad->data += *grad_outputs[j].data;
 			}
-			auto &grad_output = grad_outputs[i];
-			auto &prev_node = nodes[tensor_to_node_idx[&input]];
-			prev_node.output.grad->data->add(*grad_output.grad);
 		}
 	}
 };

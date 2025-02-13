@@ -18,7 +18,11 @@ set(ALLOW_TASKFLOW ON CACHE BOOL "Allow Taskflow to be used in the project")
 set(ExGraf_Version_Major 0)
 set(ExGraf_Version_Minor 1)
 set(ExGraf_Version_Patch 0)
-set(ExGraf_Version_Status "-dev")
+if (CMAKE_BUILD_TYPE STREQUAL "Dev")
+	set(ExGraf_Version_Status "-dev")
+elseif (CMAKE_BUILD_TYPE STREQUAL "Release")
+	set(ExGraf_Version_Status "-rel")
+endif()
 set(PROJECT_VERSION
   "${ExGraf_Version_Major}.${ExGraf_Version_Minor}.${ExGraf_Version_Patch}${ExGraf_Version_Status}"
 )
