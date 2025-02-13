@@ -10,11 +10,11 @@ class ExGrafConan(ConanFile):
 
     def requirements(self):
         self.requires("spdlog/1.15.0")
-        self.requires("armadillo/12.6.4")
+        self.requires("armadillo/12.6.4", options={"use_hdf5": False})
         self.requires("cpr/1.11.1")
         self.requires("doctest/2.4.11")
         self.requires("taskflow/3.9.0")
-        
+
     def layout(self) -> None:
         cmake_layout(self)
 

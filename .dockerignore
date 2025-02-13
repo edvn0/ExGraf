@@ -1,0 +1,10 @@
+build
+.cache
+.vscode
+venv
+*.json
+.gitignore
+.editorconfig
+.git
+.clang-format
+
