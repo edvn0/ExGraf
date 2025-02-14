@@ -2,7 +2,10 @@
 
 #include "exgraf/http/response.hpp"
 
+#include <ranges>
+#include <span>
 #include <string>
+#include <vector>
 
 namespace ExGraf::Http {
 
@@ -11,6 +14,7 @@ public:
 	explicit HttpClient(const std::string &base_url = "") : base_url(base_url) {}
 
 	auto get(const std::string &endpoint) const -> HttpResponse;
+	auto get(std::string_view endpoint) const -> HttpResponse;
 	auto post(const std::string &endpoint, const std::string &payload) const
 			-> HttpResponse;
 	auto put(const std::string &endpoint, const std::string &payload) const
@@ -19,6 +23,23 @@ public:
 
 private:
 	std::string base_url;
+};
+
+class MultithreadedDownloadClient {
+public:
+	explicit MultithreadedDownloadClient(const HttpClient &client)
+			: client(client) {}
+
+	template <std::ranges::contiguous_range R>
+	auto download(R &&urls) const -> std::vector<HttpResponse> {
+		return download_span(std::span(std::forward<R>(urls)));
+	}
+
+private:
+	HttpClient client;
+
+	auto download_span(const std::span<const std::string_view> urls) const
+			-> std::vector<HttpResponse>;
 };
 
 } // namespace ExGraf::Http

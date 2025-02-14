@@ -49,5 +49,8 @@ if(${Taskflow_FOUND})
   target_compile_definitions(ExGraf PRIVATE HAS_TASKFLOW)
 endif()
 
+# Copy directory + all files from ${CMAKE_SOURCE_DIR}/resources to ${CMAKE_BINARY_DIR}/resources
+file(COPY resources DESTINATION ${CMAKE_BINARY_DIR})
+
 enable_testing()
 add_subdirectory(tests)

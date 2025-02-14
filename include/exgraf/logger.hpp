@@ -3,6 +3,7 @@
 #include <fmt/format.h>
 #include <memory>
 
+#include <spdlog/sinks/basic_file_sink.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
 #include <spdlog/spdlog.h>
 
@@ -21,34 +22,50 @@ public:
 		}();
 		return *logger;
 	}
+
+	static auto graphviz_instance() -> auto & {
+		static std::shared_ptr<spdlog::logger> graphviz_logger = [] {
+			auto file_sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(
+					"graphviz.dot", false);
+			auto log = std::make_shared<spdlog::logger>("graphviz_logger", file_sink);
+			spdlog::register_logger(log);
+			log->set_level(spdlog::level::info);
+			return log;
+		}();
+		return *graphviz_logger;
+	}
 };
 
 template <typename... Args>
-static auto info(const fmt::format_string<Args...> &fmt,
-								 Args &&...args) -> void {
+static auto info(const fmt::format_string<Args...> &fmt, Args &&...args)
+		-> void {
 	Logger::instance().info("[INFO] {}",
 													fmt::format(fmt, std::forward<Args>(args)...));
 }
 
 template <typename... Args>
-static auto error(const fmt::format_string<Args...> &fmt,
-									Args &&...args) -> void {
+static auto error(const fmt::format_string<Args...> &fmt, Args &&...args)
+		-> void {
 	Logger::instance().error("[ERROR] {}",
 													 fmt::format(fmt, std::forward<Args>(args)...));
 }
 
 template <typename... Args>
-static auto debug(const fmt::format_string<Args...> &fmt,
-									Args &&...args) -> void {
+static auto debug(const fmt::format_string<Args...> &fmt, Args &&...args)
+		-> void {
 	Logger::instance().debug("[DEBUG] {}",
 													 fmt::format(fmt, std::forward<Args>(args)...));
 }
 
 template <typename... Args>
-static auto trace(const fmt::format_string<Args...> &fmt,
-									Args &&...args) -> void {
+static auto trace(const fmt::format_string<Args...> &fmt, Args &&...args)
+		-> void {
 	Logger::instance().trace("[TRACE] {}",
 													 fmt::format(fmt, std::forward<Args>(args)...));
+}
+
+static auto log_graphviz(const std::string &graphviz_content) -> void {
+	Logger::graphviz_instance().info(graphviz_content);
 }
 
 } // namespace ExGraf

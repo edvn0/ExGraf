@@ -19,6 +19,11 @@ public:
 	}
 	auto dims() const -> const auto & { return dimensions; }
 
+	auto rows() const -> std::size_t { return dimensions[0]; }
+	auto cols() const -> std::size_t { return dimensions[1]; }
+
+	auto operator[](std::size_t i) const -> std::size_t { return dimensions[i]; }
+
 private:
 	std::vector<std::size_t> dimensions{};
 };
