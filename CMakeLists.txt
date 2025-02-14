@@ -18,39 +18,36 @@ set(ALLOW_TASKFLOW ON CACHE BOOL "Allow Taskflow to be used in the project")
 set(ExGraf_Version_Major 0)
 set(ExGraf_Version_Minor 1)
 set(ExGraf_Version_Patch 0)
-if (CMAKE_BUILD_TYPE STREQUAL "Dev")
+
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
 	set(ExGraf_Version_Status "-dev")
-elseif (CMAKE_BUILD_TYPE STREQUAL "Release")
-	set(ExGraf_Version_Status "-rel")
+elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
+	set(ExGraf_Version_Status "")
 endif()
+
 set(PROJECT_VERSION
-  "${ExGraf_Version_Major}.${ExGraf_Version_Minor}.${ExGraf_Version_Patch}${ExGraf_Version_Status}"
+	"${ExGraf_Version_Major}.${ExGraf_Version_Minor}.${ExGraf_Version_Patch}${ExGraf_Version_Status}"
 )
 message(STATUS "${PROJECT_NAME} version: ${PROJECT_VERSION}")
 
 add_library(ExGrafHttp STATIC src/http/client.cpp)
 target_include_directories(ExGrafHttp PUBLIC include)
-target_link_libraries(ExGrafHttp PRIVATE cpr::cpr)
+target_link_libraries(ExGrafHttp PRIVATE cpr::cpr Taskflow::Taskflow)
 
-add_executable(
-  ExGraf
-  src/main.cpp
-  src/binary_operation.cpp
-  src/unary_operation.cpp
-  src/tensor.cpp
-  src/model.cpp
-  src/expression_graph.cpp
+add_library(
+	ExGraf
+	STATIC
+	src/explicit_instantiation.cpp
 )
 target_include_directories(ExGraf PUBLIC include)
-
 target_link_libraries(ExGraf PRIVATE ExGrafHttp Armadillo::Armadillo spdlog::spdlog Taskflow::Taskflow)
+target_compile_definitions(ExGraf PRIVATE HAS_TASKFLOW)
 
-if(${Taskflow_FOUND})
-  target_compile_definitions(ExGraf PRIVATE HAS_TASKFLOW)
-endif()
-
-# Copy directory + all files from ${CMAKE_SOURCE_DIR}/resources to ${CMAKE_BINARY_DIR}/resources
 file(COPY resources DESTINATION ${CMAKE_BINARY_DIR})
 
-enable_testing()
-add_subdirectory(tests)
+if(FALSE)
+	enable_testing()
+	add_subdirectory(tests)
+endif()
+
+add_subdirectory(demo)

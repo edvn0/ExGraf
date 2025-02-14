@@ -22,6 +22,16 @@ static constexpr auto to_error_code(cpr::ErrorCode value) -> ErrorCode {
 	}
 }
 
+static constexpr auto create_error_maybe(cpr::Error error)
+		-> std::optional<HttpError> {
+	if (error.code == cpr::ErrorCode::OK)
+		return std::nullopt;
+	return HttpError{
+			.code = to_error_code(error.code),
+			.message = error.message,
+	};
+}
+
 auto HttpClient::get(const std::string &endpoint) const -> HttpResponse {
 	auto r = cpr::Get(cpr::Url{
 			base_url + endpoint,
@@ -31,12 +41,7 @@ auto HttpClient::get(const std::string &endpoint) const -> HttpResponse {
 			.status_code = to_int(r.status_code),
 			.body = r.text,
 			.success = r.status_code == 200,
-			.error =
-					{
-							.code = to_error_code(r.error.code),
-							.message = r.error.message,
-					},
-
+			.error = create_error_maybe(r.error),
 	};
 }
 
@@ -49,11 +54,7 @@ auto HttpClient::get(std::string_view endpoint) const -> HttpResponse {
 			.status_code = to_int(r.status_code),
 			.body = r.text,
 			.success = r.status_code == 200,
-			.error =
-					{
-							.code = to_error_code(r.error.code),
-							.message = r.error.message,
-					},
+			.error = create_error_maybe(r.error),
 	};
 }
 
@@ -71,11 +72,7 @@ auto HttpClient::post(const std::string &endpoint,
 			.status_code = to_int(r.status_code),
 			.body = r.text,
 			.success = r.status_code == 200,
-			.error =
-					{
-							.code = to_error_code(r.error.code),
-							.message = r.error.message,
-					},
+			.error = create_error_maybe(r.error),
 	};
 }
 
@@ -93,11 +90,7 @@ auto HttpClient::put(const std::string &endpoint,
 			.status_code = to_int(r.status_code),
 			.body = r.text,
 			.success = r.status_code == 200,
-			.error =
-					{
-							.code = to_error_code(r.error.code),
-							.message = r.error.message,
-					},
+			.error = create_error_maybe(r.error),
 	};
 }
 
@@ -110,11 +103,7 @@ auto HttpClient::del(const std::string &endpoint) const -> HttpResponse {
 			.status_code = to_int(r.status_code),
 			.body = r.text,
 			.success = r.status_code == 200,
-			.error =
-					{
-							.code = to_error_code(r.error.code),
-							.message = r.error.message,
-					},
+			.error = create_error_maybe(r.error),
 	};
 }
 
