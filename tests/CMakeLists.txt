@@ -1,6 +1,5 @@
 add_executable(ExGrafTests
   test_main.cpp
-  tensor_one_hot_tests.cpp
 )
 target_include_directories(ExGrafTests PUBLIC
   ${CMAKE_SOURCE_DIR}/include

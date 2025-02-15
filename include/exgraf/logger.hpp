@@ -64,7 +64,7 @@ static auto trace(const fmt::format_string<Args...> &fmt, Args &&...args)
 													 fmt::format(fmt, std::forward<Args>(args)...));
 }
 
-static auto log_graphviz(const std::string &graphviz_content) -> void {
+inline auto log_graphviz(const std::string &graphviz_content) -> void {
 	Logger::graphviz_instance().info(graphviz_content);
 }
 

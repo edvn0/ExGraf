@@ -10,6 +10,7 @@ find_package(spdlog REQUIRED)
 find_package(cpr REQUIRED)
 find_package(Taskflow REQUIRED)
 find_package(doctest REQUIRED)
+find_package(Boost REQUIRED)
 
 message(STATUS "ExGraf Build Type: ${CMAKE_BUILD_TYPE}")
 
@@ -25,6 +26,49 @@ elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
 	set(ExGraf_Version_Status "")
 endif()
 
+
+# Enable strict compiler warnings
+set(COMMON_COMPILE_OPTIONS
+    -Wall
+    -Wextra
+    -Wpedantic
+    -Werror
+    -Wshadow
+    -Wconversion
+    -Wsign-conversion
+    -Wnon-virtual-dtor
+    -Wold-style-cast
+    -Woverloaded-virtual
+    -Wnull-dereference
+    -Wunused
+)
+
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    list(APPEND COMMON_COMPILE_OPTIONS
+        -Wdouble-promotion
+        -Wformat=2
+        -Wstrict-overflow=5
+        -Wundef
+        -Wcast-align
+        -Wcast-qual
+        -Wmisleading-indentation
+        -Wduplicated-cond
+        -Wduplicated-branches
+        -Wlogical-op
+        -Wuseless-cast
+    )
+elseif(CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
+    list(APPEND COMMON_COMPILE_OPTIONS
+        /W4
+        /WX
+        /permissive-
+        /sdl
+    )
+endif()
+
+# Apply compile options globally
+add_compile_options(${COMMON_COMPILE_OPTIONS})
+
 set(PROJECT_VERSION
 	"${ExGraf_Version_Major}.${ExGraf_Version_Minor}.${ExGraf_Version_Patch}${ExGraf_Version_Status}"
 )
@@ -38,16 +82,14 @@ add_library(
 	ExGraf
 	STATIC
 	src/explicit_instantiation.cpp
+	src/loaders/mnist.cpp
 )
 target_include_directories(ExGraf PUBLIC include)
 target_link_libraries(ExGraf PRIVATE ExGrafHttp Armadillo::Armadillo spdlog::spdlog Taskflow::Taskflow)
-target_compile_definitions(ExGraf PRIVATE HAS_TASKFLOW)
 
 file(COPY resources DESTINATION ${CMAKE_BINARY_DIR})
 
-if(FALSE)
-	enable_testing()
-	add_subdirectory(tests)
-endif()
+enable_testing()
+add_subdirectory(tests)
 
 add_subdirectory(demo)

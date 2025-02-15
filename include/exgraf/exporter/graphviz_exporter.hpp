@@ -5,6 +5,7 @@
 #include <sstream>
 #include <unordered_map>
 
+#include <fmt/core.h>
 #include <taskflow/taskflow.hpp>
 
 namespace ExGraf {
@@ -21,17 +22,17 @@ public:
 		std::unordered_map<Node<T> *, std::string> node_ids;
 		int node_count = 0;
 
-		for (const auto &node_ptr : graph.nodes) {
+		for (const auto &node_ptr : graph.get_nodes()) {
 			std::string node_id = fmt::format("node{}", node_count++);
-			node_ids[node_ptr.get()] = node_id;
+			node_ids[node_ptr] = node_id;
 			dot << "  " << node_id << " [label=\"" << get_node_label(*node_ptr)
 					<< "\", shape=" << get_node_shape(*node_ptr) << "];\n";
 		}
 
-		for (const auto &node_ptr : graph.nodes) {
-			for (Node<T> *input_node : node_ptr->inputs) {
-				dot << "  " << node_ids[input_node] << " -> "
-						<< node_ids[node_ptr.get()] << ";\n";
+		for (const auto &node_ptr : graph.get_nodes()) {
+			for (auto *input_node : node_ptr->get_all_inputs()) {
+				dot << "  " << node_ids[input_node] << " -> " << node_ids[node_ptr]
+						<< ";\n";
 			}
 		}
 

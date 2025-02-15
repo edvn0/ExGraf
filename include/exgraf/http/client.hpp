@@ -11,7 +11,7 @@ namespace ExGraf::Http {
 
 class HttpClient {
 public:
-	explicit HttpClient(const std::string &base_url = "") : base_url(base_url) {}
+	explicit HttpClient(const std::string &b = "") : base_url(b) {}
 
 	auto get(const std::string &endpoint) const -> HttpResponse;
 	auto get(std::string_view endpoint) const -> HttpResponse;
@@ -27,8 +27,7 @@ private:
 
 class MultithreadedDownloadClient {
 public:
-	explicit MultithreadedDownloadClient(const HttpClient &client)
-			: client(client) {}
+	explicit MultithreadedDownloadClient(const HttpClient &c) : client(c) {}
 
 	template <std::ranges::contiguous_range R>
 	auto download(R &&urls) const -> std::vector<HttpResponse> {

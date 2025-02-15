@@ -3,6 +3,7 @@
 #include "exgraf/operations.hpp"
 #include "exgraf/placeholder.hpp"
 #include "exgraf/variable.hpp"
+#include "exgraf/visitors/graphviz.hpp"
 
 namespace ExGraf {
 #define X(T) template class Variable<T>;
@@ -23,6 +24,10 @@ EXGRAF_ALLOWED_TYPES
 #undef X
 
 #define X(T) template class ExpressionGraph<T>;
+EXGRAF_ALLOWED_TYPES
+#undef X
+
+#define X(T) template class GraphvizVisitor<T>;
 EXGRAF_ALLOWED_TYPES
 #undef X
 
