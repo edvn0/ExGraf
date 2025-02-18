@@ -11,8 +11,19 @@
 
 namespace ExGraf {
 
+enum class NodeType : std::uint8_t {
+	Variable,
+	Placeholder,
+	Add,
+	Mult,
+	Softmax,
+	CrossEntropyLoss,
+	ReLU,
+};
+
 template <AllowedTypes T> class Node {
 protected:
+	NodeType type;
 	std::vector<Node<T> *> inputs;
 	std::vector<Node<T> *> outputs;
 	std::optional<arma::Mat<T>> value;
@@ -26,15 +37,15 @@ protected:
 	}
 
 public:
-	explicit Node(std::vector<Node<T> *> predecessors)
-			: inputs(std::move(predecessors)) {
+	explicit Node(NodeType t, std::vector<Node<T> *> predecessors)
+			: type(t), inputs(std::move(predecessors)) {
 		for (auto *input : inputs) {
 			input->outputs.push_back(this);
 		}
 	}
 
-	explicit Node(std::initializer_list<Node<T> *> predecessors)
-			: inputs(predecessors) {
+	explicit Node(NodeType t, std::initializer_list<Node<T> *> predecessors)
+			: type(t), inputs(predecessors) {
 		for (auto *input : inputs) {
 			input->outputs.push_back(this);
 		}
@@ -45,6 +56,15 @@ public:
 	virtual auto backward(const arma::Mat<T> &) -> void = 0;
 	virtual auto accept(NodeVisitor<T> &visitor) -> void = 0;
 	virtual auto name() const -> std::string_view = 0;
+
+	template <typename Other> auto as() -> auto * {
+		return dynamic_cast<Other *>(this);
+	}
+	template <typename Other> auto as() const -> const auto * {
+		return dynamic_cast<const Other *>(this);
+	}
+
+	auto get_gradient() const { return gradient; }
 
 	auto get_all_inputs() const { return std::span(inputs); }
 	auto rows() const {

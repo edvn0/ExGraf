@@ -54,55 +54,45 @@ public:
 			: layer_sizes(sizes) {}
 
 	struct ModelConfig {
+		static constexpr auto unused = ~std::int32_t(0);
+		static constexpr auto determine_samples = -1;
+		arma::vec3 input_size{
+				determine_samples,
+				32,
+				unused,
+		};
 		ActivationFunction activation_function{ActivationFunction::ReLU};
 		LossFunction loss_function{LossFunction::CrossEntropy};
 		OutputActivationFunction output_activation_function{
 				OutputActivationFunction::Softmax};
 		Optimizer optimizer{Optimizer::SGD};
 	};
-	void compile_model(const ModelConfig &config) {
+	auto compile_model(const ModelConfig &config) -> void {
 		auto x = add_placeholder("X");
 		auto y = add_placeholder("Y");
 		input = x;
 
-		// First layer
-		// If input X is (n × d_0), then W_0 should be (d_0 × d_1)
-		auto w0 = add_variable(randn_matrix<T>(layer_sizes[0], layer_sizes[1]));
-		auto b0 = add_variable(randn_matrix<T>(1, layer_sizes[1]));
+		Node<T> *current_layer = x;
+		std::uint32_t current_size = layer_sizes[0];
 
-		// z0 = X · W_0, resulting in (n × d_1)
-		auto z0 = add_node<Mult<T>>(x, w0);
-		auto z1 = add_node<Add<T>>(z0, b0);
-
-		auto layer_output = add_node<ReLU<T>>(z1);
-
-		// Hidden layers
-		for (std::size_t i = 1; i < layer_sizes.size() - 2; ++i) {
-			// W_i should be (d_i × d_{i+1})
-			auto w =
-					add_variable(randn_matrix<T>(layer_sizes[i], layer_sizes[i + 1]));
-			auto b = add_variable(randn_matrix<T>(1, layer_sizes[i + 1]));
-
-			// If previous output is (n × d_i), then result will be (n × d_{i+1})
-			auto z_hidden_0 = add_node<Mult<T>>(layer_output, w);
-			auto z_hidden_1 = add_node<Add<T>>(z_hidden_0, b);
-			layer_output = add_node<ReLU<T>>(z_hidden_1);
+		for (std::size_t i = 0; i < layer_sizes.size() - 1; ++i) {
+			std::uint32_t output_size = layer_sizes[i + 1];
+			auto layer = add_layer(current_layer, current_size, output_size);
+			const auto is_last_layer = i < layer_sizes.size() - 2;
+			if (!is_last_layer) {
+				current_layer = add_node<ReLU<T>>(layer);
+			} else {
+				current_layer = layer;
+			}
+			current_size = output_size;
 		}
 
-		// Output layer - no activation yet
-		auto w_last = add_variable(randn_matrix<T>(
-				layer_sizes[layer_sizes.size() - 2], layer_sizes.back()));
-		auto b_last = add_variable(randn_matrix<T>(1, layer_sizes.back()));
-		auto mult_output = add_node<Mult<T>>(layer_output, w_last);
-		auto add_output = add_node<Add<T>>(mult_output, b_last);
-
-		// Apply output activation
 		switch (config.output_activation_function) {
 		case OutputActivationFunction::Softmax:
-			predictor = add_node<Softmax<T>>(add_output);
+			predictor = add_node<Softmax<T>>(current_layer);
 			break;
 		case OutputActivationFunction::ReLU:
-			predictor = add_node<ReLU<T>>(add_output);
+			predictor = add_node<ReLU<T>>(current_layer);
 			break;
 		default:
 			throw std::runtime_error("Unsupported output activation function");
@@ -126,29 +116,56 @@ public:
 					"Expected input shape (N, {}), but got ({} x {})", layer_sizes[0],
 					input_matrix.n_rows, input_matrix.n_cols));
 		}
-		get_placeholder("X")->set_value(input_matrix.t());
+		get_placeholder("X")->set_value(input_matrix);
 		return predictor->forward();
 	}
 
-	void learn(const arma::Mat<T> &labels) {
-		arma::Mat<T> loss_gradient = arma::ones<arma::Mat<T>>(10, 1);
+	auto learn(const arma::Mat<T> &labels) -> arma::Mat<T> {
+		arma::Mat<T> loss_gradient = arma::Mat<T>(10, 1, arma::fill::ones);
 		get_placeholder("Y")->set_value(labels);
 		output->backward(loss_gradient);
+		return arma::Mat<T>{1, 1};
 	}
 
 	template <typename Visitor, typename... Args> auto visit(Args &&...args) {
-		auto visitor = std::make_unique<Visitor>(std::forward<Args>(args)...);
+		Visitor visitor{
+				std::forward<Args>(args)...,
+		};
 		if (output) {
-			output->accept(*visitor);
+			output->accept(visitor);
 		}
 
 		if constexpr (requires(Visitor &t) { t.finalise(); }) {
-			visitor->finalise();
+			visitor.finalise();
+		}
+
+		if constexpr (requires(Visitor &t) { t.result(); }) {
+			return visitor.result();
 		}
 	}
 
 	auto get_nodes() const {
 		return nodes | std::views::transform([](auto &v) { return v.get(); });
+	}
+
+	auto get_placeholder(const std::string &id) -> Placeholder<T> * {
+		assert(placeholders.contains(id));
+		return placeholders.at(id);
+	}
+	auto add_placeholder(const std::string &id) -> Placeholder<T> * {
+		auto *placeholder = add_node<Placeholder<T>>(id);
+		placeholders[id] = placeholder;
+		return placeholder;
+	}
+	auto add_layer(Node<T> *input_node, std::unsigned_integral auto input_nodes,
+								 std::unsigned_integral auto output_nodes) {
+		assert(input_node);
+
+		auto B = add_variable(randn_matrix<T>(output_nodes, 1));
+		auto W = add_variable(randn_matrix<T>(output_nodes, input_nodes));
+		auto XW = add_node<Mult<T>>(input_node, W);
+		auto XW_plus_B = add_node<Add<T>>(XW, B);
+		return XW_plus_B;
 	}
 
 private:
@@ -167,18 +184,8 @@ private:
 		return ptr;
 	}
 
-	Placeholder<T> *add_placeholder(const std::string &id) {
-		auto *placeholder = add_node<Placeholder<T>>(id);
-		placeholders[id] = placeholder;
-		return placeholder;
-	}
-
 	Variable<T> *add_variable(const arma::Mat<T> &initial_value) {
 		return add_node<Variable<T>>(initial_value);
-	}
-
-	Placeholder<T> *get_placeholder(const std::string &id) {
-		return placeholders.at(id);
 	}
 };
 

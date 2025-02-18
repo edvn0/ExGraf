@@ -82,7 +82,7 @@ add_library(
 	ExGraf
 	STATIC
 	src/explicit_instantiation.cpp
-	src/loaders/mnist.cpp
+	src/filesystem.cpp
 )
 target_include_directories(ExGraf PUBLIC include)
 target_link_libraries(ExGraf PRIVATE ExGrafHttp Armadillo::Armadillo spdlog::spdlog Taskflow::Taskflow)

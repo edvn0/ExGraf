@@ -11,6 +11,14 @@
 			"program": "${workspaceFolder}/build/Debug/demo/ExGrafDemo",
 			"args": [],
 			"cwd": "${workspaceFolder}"
+		},
+		{
+			"type": "lldb",
+			"request": "launch",
+			"name": "Debug Tests",
+			"program": "${workspaceFolder}/build/Debug/tests/ExGrafTests",
+			"args": [],
+			"cwd": "${workspaceFolder}"
 		}
 	]
 }

@@ -8,27 +8,30 @@
 #include <vector>
 #include <zlib.h>
 
-namespace ExGraf::MNIST {
-
-namespace detail {
+namespace ExGraf::FS {
 
 constexpr std::uint16_t IMAGE_MAGIC = 2051;
 constexpr std::uint16_t LABEL_MAGIC = 2049;
 
-// Function to parse big-endian integers from byte array
 auto parse_int(const std::vector<std::uint8_t> &data, std::size_t offset)
 		-> std::int32_t {
-	return (static_cast<std::uint32_t>(data[offset]) << 24) |
-				 (static_cast<std::uint32_t>(data[offset + 1]) << 16) |
-				 (static_cast<std::uint32_t>(data[offset + 2]) << 8) |
-				 static_cast<std::uint32_t>(data[offset + 3]);
+
+	static constexpr auto shift_and_cast = [](auto &C, auto off, auto shift) {
+		return static_cast<std::int32_t>(C.at(off) << shift);
+	};
+
+	auto with_data = [&d = data](auto off, std::int32_t shift = (0)) {
+		return shift_and_cast(d, off, shift);
+	};
+
+	return with_data(offset, 24) | with_data(offset + 1, 16) |
+				 with_data(offset + 2, 8) | with_data(offset + 3);
 }
 
-// Function to decompress gzip data
-auto decompress_gzip(const std::vector<std::uint8_t> &compressed_data)
+auto decompress_gzip(const std::span<const std::uint8_t> compressed_data)
 		-> std::vector<std::uint8_t> {
 	z_stream strm{};
-	strm.next_in = const_cast<Bytef *>(compressed_data.data());
+	strm.next_in = const_cast<std::uint8_t *>(compressed_data.data());
 	strm.avail_in = static_cast<uInt>(compressed_data.size());
 
 	if (inflateInit2(&strm, 16 + MAX_WBITS) != Z_OK) {
@@ -36,7 +39,7 @@ auto decompress_gzip(const std::vector<std::uint8_t> &compressed_data)
 	}
 
 	std::vector<std::uint8_t> decompressed_data;
-	std::array<std::uint8_t, 8192> buffer;
+	std::array<std::uint8_t, 8192> buffer{};
 
 	int ret;
 	do {
@@ -60,37 +63,55 @@ auto decompress_gzip(const std::vector<std::uint8_t> &compressed_data)
 	return decompressed_data;
 }
 
-auto decode_images(const std::vector<std::uint8_t> &data) -> arma::Mat<double> {
+auto decode_images(const std::vector<std::uint8_t> &data,
+									 arma::Mat<double> &images) -> bool {
 	if (const auto parsed = parse_int(data, 0); parsed != IMAGE_MAGIC) {
-		throw std::runtime_error("Invalid MNIST image file magic number");
+		return false;
 	}
 	std::uint32_t num_images = static_cast<std::uint32_t>(parse_int(data, 4));
 	std::uint32_t rows = static_cast<std::uint32_t>(parse_int(data, 8));
 	std::uint32_t cols = static_cast<std::uint32_t>(parse_int(data, 12));
 
-	arma::Mat<double> images(rows * cols, num_images);
+	images.resize(arma::SizeMat{
+			cols * rows,
+			num_images,
+	});
 	for (std::uint32_t i = 0; i < num_images; ++i) {
 		for (std::uint32_t j = 0; j < rows * cols; ++j) {
 			images(j, i) =
 					data[16 + i * rows * cols + j] / 255.0; // Normalize to [0, 1]
 		}
 	}
-	return images;
+
+	return true;
 }
 
-auto decode_labels(const std::vector<std::uint8_t> &data) -> arma::Mat<double> {
+auto decode_labels(const std::vector<std::uint8_t> &data,
+									 arma::Mat<double> &labels) -> bool {
 	if (const auto parsed = parse_int(data, 0); parsed != LABEL_MAGIC) {
-		throw std::runtime_error("Invalid MNIST label file magic number");
+		return false;
 	}
 	auto num_labels = static_cast<std::uint32_t>(parse_int(data, 4));
 
-	arma::Mat<double> labels(10, num_labels, arma::fill::zeros);
+	labels.resize(arma::SizeMat{10, num_labels});
 	for (std::uint32_t i = 0; i < num_labels; ++i) {
-		labels(static_cast<int>(data[8 + i]), i) = 1.0;
+		labels(static_cast<unsigned long long>(data[8 + i]), i) = 1.0;
 	}
-	return labels;
+
+	return true;
 }
 
-} // namespace detail
+auto read_file(const std::string &path) -> std::vector<std::uint8_t> {
+	std::ifstream file(path, std::ios::binary);
+	if (!file) {
+		throw std::runtime_error("Failed to open file: " + path);
+	}
 
-} // namespace ExGraf::MNIST
+	std::vector<std::uint8_t> buffer;
+	buffer.assign(std::istreambuf_iterator<char>(file),
+								std::istreambuf_iterator<char>());
+
+	return buffer;
+}
+
+} // namespace ExGraf::FS

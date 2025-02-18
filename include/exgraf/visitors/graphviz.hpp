@@ -71,7 +71,7 @@ private:
 		}
 	}
 
-	void process_node(const Node<T> &n) {
+	auto process_node(const Node<T> &n) -> void {
 		const auto *node = &n;
 		if (node == nullptr)
 			throw std::runtime_error("What are you doing????");

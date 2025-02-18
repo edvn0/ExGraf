@@ -22,7 +22,7 @@ private:
 			visit_recursively(input);
 		}
 
-		info("Evaluating Node: {}", node->name());
+		trace("Evaluating Node: {}", node->name());
 	}
 
 public:

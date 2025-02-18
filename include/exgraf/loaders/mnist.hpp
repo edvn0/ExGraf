@@ -1,5 +1,6 @@
 #pragma once
 
+#include "exgraf/filesystem.hpp"
 #include "exgraf/http/client.hpp"
 #include <armadillo>
 #include <exception>
@@ -8,14 +9,6 @@
 #include <taskflow/taskflow.hpp>
 
 namespace ExGraf::MNIST {
-
-namespace detail {
-auto parse_int(const std::vector<std::uint8_t> &, std::size_t) -> std::int32_t;
-auto decode_images(const std::vector<std::uint8_t> &) -> arma::Mat<double>;
-auto decode_labels(const std::vector<std::uint8_t> &) -> arma::Mat<double>;
-auto decompress_gzip(const std::vector<std::uint8_t> &)
-		-> std::vector<std::uint8_t>;
-} // namespace detail
 
 inline auto load(const std::string_view images, const std::string_view labels)
 		-> std::pair<arma::Mat<double>, arma::Mat<double>> {
@@ -36,7 +29,7 @@ inline auto load(const std::string_view images, const std::string_view labels)
 		}
 		auto compressed_data =
 				std::vector<std::uint8_t>(response.body.begin(), response.body.end());
-		img_data = detail::decompress_gzip(compressed_data);
+		img_data = FS::decompress_gzip(compressed_data);
 	});
 
 	auto lbl_load_task = flow.emplace([&] {
@@ -47,13 +40,13 @@ inline auto load(const std::string_view images, const std::string_view labels)
 		}
 		auto compressed_data =
 				std::vector<std::uint8_t>(response.body.begin(), response.body.end());
-		lbl_data = detail::decompress_gzip(compressed_data);
+		lbl_data = FS::decompress_gzip(compressed_data);
 	});
 
 	std::pair<arma::Mat<double>, arma::Mat<double>> result;
 	auto decode_task = flow.emplace([&] {
-		result = std::make_pair(detail::decode_images(img_data),
-														detail::decode_labels(lbl_data));
+		FS::decode_images(img_data, std::get<0>(result));
+		FS::decode_labels(lbl_data, std::get<1>(result));
 	});
 
 	auto transpose = flow.emplace([&] {

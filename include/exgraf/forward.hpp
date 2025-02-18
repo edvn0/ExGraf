@@ -4,6 +4,7 @@
 
 namespace ExGraf {
 
+template <AllowedTypes T> class Node;
 template <AllowedTypes T> class Placeholder;
 template <AllowedTypes T> class Variable;
 template <AllowedTypes T> class Add;
