@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdlib>
 #include <fmt/format.h>
 #include <memory>
 
@@ -17,7 +18,13 @@ public:
 			auto log = std::make_shared<spdlog::logger>("app_logger", sink);
 			spdlog::register_logger(log);
 			log->set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%^%l%$] [thread %t] %v");
-			log->set_level(spdlog::level::debug);
+			// read from env
+			if (const auto *log_level = std::getenv("LOG_LEVEL")) {
+				log->set_level(spdlog::level::from_str(log_level));
+			} else {
+				log->set_level(spdlog::level::debug);
+			}
+
 			return log;
 		}();
 		return *logger;
@@ -29,7 +36,12 @@ public:
 					"graphviz.dot", false);
 			auto log = std::make_shared<spdlog::logger>("graphviz_logger", file_sink);
 			spdlog::register_logger(log);
-			log->set_level(spdlog::level::info);
+			if (const auto *log_level = std::getenv("LOG_LEVEL")) {
+				log->set_level(spdlog::level::from_str(log_level));
+			} else {
+				log->set_level(spdlog::level::debug);
+			}
+
 			return log;
 		}();
 		return *graphviz_logger;

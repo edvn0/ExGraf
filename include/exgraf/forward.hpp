@@ -12,6 +12,10 @@ template <AllowedTypes T> class Mult;
 template <AllowedTypes T> class ReLU;
 template <AllowedTypes T> class Softmax;
 template <AllowedTypes T> class CrossEntropyLoss;
+template <AllowedTypes T> class SumAxis;
+template <AllowedTypes T> class Log;
+template <AllowedTypes T> class Neg;
+template <AllowedTypes T> class Hadamard;
 
 template <AllowedTypes T> class ExpressionGraph;
 

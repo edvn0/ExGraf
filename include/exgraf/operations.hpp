@@ -1,12 +1,73 @@
 #pragma once
 
+#include "exgraf/allowed_types.hpp"
 #include "exgraf/logger.hpp"
 #include "exgraf/node.hpp"
-#include "exgraf/placeholder.hpp"
-
-#include <concepts>
 
 namespace ExGraf {
+
+struct IncompatibleDimensionsError : std::logic_error {
+	template <AllowedTypes T>
+	IncompatibleDimensionsError(const arma::Mat<T> &lhs, const arma::Mat<T> &rhs)
+			: std::logic_error(fmt::format("Incompatible dimensions for matrix "
+																		 "multiplication: ({}, {}) and ({}, {})",
+																		 lhs.n_rows, lhs.n_cols, rhs.n_rows,
+																		 rhs.n_cols)) {}
+};
+
+template <AllowedTypes T> class Hadamard : public Node<T> {
+public:
+	Hadamard(Node<T> *lhs, Node<T> *rhs)
+			: Node<T>(NodeType::Hadamard, {lhs, rhs}) {}
+
+	auto accept(NodeVisitor<T> &visitor) -> void override {
+		visitor.visit(*this);
+	}
+
+	arma::Mat<T> forward() override {
+		auto lhs = this->inputs[0]->forward();
+		auto rhs = this->inputs[1]->forward();
+
+		trace("Hadamard::forward - LHS shape: ({}, {}), RHS shape: ({}, {})",
+					lhs.n_rows, lhs.n_cols, rhs.n_rows, rhs.n_cols);
+
+		if (lhs.n_rows != rhs.n_rows || lhs.n_cols != rhs.n_cols) {
+			throw IncompatibleDimensionsError(lhs, rhs);
+		}
+
+		arma::Mat<T> result = lhs % rhs;
+
+		trace("Hadamard::forward - Result shape: ({}, {})", result.n_rows,
+					result.n_cols);
+		this->value = result;
+		return *this->value;
+	}
+
+	void backward(const arma::Mat<T> &grad) override {
+		trace("Hadamard::backward - Gradient shape: ({}, {})", grad.n_rows,
+					grad.n_cols);
+
+		auto lhs = this->inputs[0]->forward();
+		auto rhs = this->inputs[1]->forward();
+
+		if (lhs.n_rows != rhs.n_rows || lhs.n_cols != rhs.n_cols) {
+			throw IncompatibleDimensionsError(lhs, rhs);
+		}
+
+		arma::Mat<T> lhs_grad = grad % rhs;
+		arma::Mat<T> rhs_grad = lhs % grad;
+
+		trace("Hadamard::backward - LHS gradient shape: ({}, {}), RHS gradient "
+					"shape: "
+					"({}, {})",
+					lhs_grad.n_rows, lhs_grad.n_cols, rhs_grad.n_rows, rhs_grad.n_cols);
+
+		this->inputs[0]->backward(lhs_grad);
+		this->inputs[1]->backward(rhs_grad);
+	}
+
+	auto name() const -> std::string_view override { return "Hadamard"; }
+};
 
 template <AllowedTypes T> class Mult : public Node<T> {
 public:
@@ -33,11 +94,7 @@ public:
 		}
 
 		if (broadcasted_lhs.n_cols != broadcasted_rhs.n_rows) {
-			throw std::runtime_error(
-					fmt::format("Incompatible dimensions for matrix multiplication: ({}, "
-											"{}) and ({}, {})",
-											broadcasted_lhs.n_rows, broadcasted_lhs.n_cols,
-											broadcasted_rhs.n_rows, broadcasted_rhs.n_cols));
+			throw IncompatibleDimensionsError(broadcasted_lhs, broadcasted_rhs);
 		}
 
 		arma::Mat<T> result = broadcasted_lhs * broadcasted_rhs;
@@ -70,8 +127,8 @@ public:
 			rhs_grad = arma::sum(lhs.t() * grad, 1);
 		} else {
 			// Standard case - no broadcasting
-			lhs_grad = grad * rhs.t();
-			rhs_grad = lhs.t() * grad;
+			lhs_grad = grad.t() * rhs;
+			rhs_grad = lhs * grad.t();
 		}
 
 		trace("Mult::backward - LHS gradient shape: ({}, {}), RHS gradient shape: "
@@ -118,9 +175,7 @@ public:
 		else if (lhs.n_rows == rhs.n_rows && lhs.n_cols == rhs.n_cols) {
 			result = lhs + rhs;
 		} else {
-			throw std::runtime_error(fmt::format(
-					"Incompatible dimensions for Add operation: ({}, {}) and ({}, {})",
-					lhs.n_rows, lhs.n_cols, rhs.n_rows, rhs.n_cols));
+			throw IncompatibleDimensionsError(lhs, rhs);
 		}
 
 		trace("Add::forward - Result shape: ({}, {})", result.n_rows,
@@ -199,9 +254,7 @@ public:
 
 		if (grad.n_rows != input_values.n_rows ||
 				grad.n_cols != input_values.n_cols) {
-			throw std::runtime_error(fmt::format(
-					"Gradient shape ({}, {}) doesn't match input shape ({}, {})",
-					grad.n_rows, grad.n_cols, input_values.n_rows, input_values.n_cols));
+			throw IncompatibleDimensionsError(input_values, grad);
 		}
 
 		arma::Mat<T> relu_grad(input_values.n_rows, input_values.n_cols);
@@ -221,6 +274,102 @@ public:
 	}
 
 	auto name() const -> std::string_view override { return "ReLU"; }
+};
+
+template <AllowedTypes T> class SumAxis : public Node<T> {
+	int axis;
+
+public:
+	SumAxis(Node<T> *input, int a = -1)
+			: Node<T>(NodeType::Sum, {input}), axis(a) {}
+
+	auto accept(NodeVisitor<T> &visitor) -> void override {
+		visitor.visit(*this);
+	}
+
+	auto forward() -> arma::Mat<T> override {
+		auto x = this->inputs[0]->forward();
+		arma::Mat<T> y;
+		if (axis == 0) {
+			y = arma::sum(x, 0);
+			if (y.n_rows != 1)
+				y = y.t();
+		} else if (axis == 1) {
+			y = arma::sum(x, 1);
+			if (y.n_cols != 1)
+				y = y.t();
+		} else {
+			T total = arma::accu(x);
+			y.set_size(1, 1);
+			y(0, 0) = total;
+		}
+		this->value = y;
+		return *this->value;
+	}
+
+	auto backward(const arma::Mat<T> &grad) -> void override {
+		auto x = this->inputs[0]->forward();
+		arma::Mat<T> dx;
+		if (axis == 0) {
+			dx = arma::repmat(grad, x.n_rows, 1);
+		} else if (axis == 1) {
+			dx = arma::repmat(grad, 1, x.n_cols);
+		} else {
+			dx = arma::ones<arma::Mat<T>>(x.n_rows, x.n_cols) * grad(0, 0);
+		}
+		this->inputs[0]->backward(dx);
+	}
+
+	auto name() const -> std::string_view override { return "SumAxis"; }
+};
+
+template <AllowedTypes T> class Log : public Node<T> {
+public:
+	explicit Log(Node<T> *input) : Node<T>(NodeType::Log, {input}) {}
+
+	auto accept(NodeVisitor<T> &visitor) -> void override {
+		visitor.visit(*this);
+	}
+
+	auto forward() -> arma::Mat<T> override {
+		auto x = this->inputs[0]->forward();
+		trace("Log::forward - Input shape: ({}, {})", x.n_rows, x.n_cols);
+		arma::Mat<T> y = arma::log(x);
+		this->value = y;
+		return *this->value;
+	}
+
+	auto backward(const arma::Mat<T> &grad) -> void override {
+		auto x = this->inputs[0]->forward();
+		arma::Mat<T> dx = grad / x;
+		this->inputs[0]->backward(dx);
+	}
+
+	auto name() const -> std::string_view override { return "Log"; }
+};
+
+template <AllowedTypes T> class Neg : public Node<T> {
+public:
+	explicit Neg(Node<T> *input) : Node<T>(NodeType::Negate, {input}) {}
+
+	auto accept(NodeVisitor<T> &visitor) -> void override {
+		visitor.visit(*this);
+	}
+
+	auto forward() -> arma::Mat<T> override {
+		auto x = this->inputs[0]->forward();
+		trace("Neg::forward - Input shape: ({}, {})", x.n_rows, x.n_cols);
+		arma::Mat<T> y = -x;
+		this->value = y;
+		return *this->value;
+	}
+
+	auto backward(const arma::Mat<T> &grad) -> void override {
+		arma::Mat<T> dx = -grad;
+		this->inputs[0]->backward(dx);
+	}
+
+	auto name() const -> std::string_view override { return "Neg"; }
 };
 
 template <AllowedTypes T> class CrossEntropyLoss : public Node<T> {
@@ -248,9 +397,7 @@ public:
 		} else if (p.n_rows == t.n_rows && p.n_cols == t.n_cols) {
 			aligned = t;
 		} else {
-			throw std::runtime_error(fmt::format(
-					"Incompatible shapes: prediction ({}, {}) and target ({}, {})",
-					p.n_rows, p.n_cols, t.n_rows, t.n_cols));
+			throw IncompatibleDimensionsError(p, t);
 		}
 
 		arma::Mat<T> pointwise_loss = -aligned % arma::log(p);

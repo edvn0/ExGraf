@@ -30,8 +30,7 @@ private:
 	int next_id = 0;
 
 	std::string get_node_id(const Node<T> *node) {
-		auto it = node_ids.find(node);
-		if (it != node_ids.end()) {
+		if (auto it = node_ids.find(node); it != node_ids.end()) {
 			return it->second;
 		}
 		std::string id = fmt::format("node{}", next_id++);
@@ -76,7 +75,7 @@ private:
 		if (node == nullptr)
 			throw std::runtime_error("What are you doing????");
 
-		if (visited.count(node) > 0) {
+		if (visited.contains(node)) {
 			return;
 		}
 
@@ -139,6 +138,73 @@ public:
 			return true;
 		} else {
 			return false;
+		}
+	}
+};
+
+template <AllowedTypes T> class LayerTableVisitor : public NodeVisitor<T> {
+private:
+	struct layer_info {
+		std::string layer_name;
+		std::string shape;
+		std::size_t param_count;
+	};
+
+	std::vector<layer_info> layers;
+	std::unordered_set<const Node<T> *> visited;
+
+	auto is_layerish(const Node<T> &n) -> bool {
+		if (n.is_weight() || n.is_bias())
+			return true;
+		if (dynamic_cast<const Add<T> *>(&n))
+			return true;
+		if (dynamic_cast<const Mult<T> *>(&n))
+			return true;
+		return false;
+	}
+
+	auto store_node(const Node<T> &n) -> void {
+		if (visited.count(&n))
+			return;
+		visited.insert(&n);
+		if (!is_layerish(n))
+			return;
+
+		std::string shape_str = "(?, ?)";
+		std::size_t param_count = 0;
+
+		try {
+			if (n.has_value()) {
+				shape_str = "(" + std::to_string(n.rows()) + ", " +
+										std::to_string(n.cols()) + ")";
+			}
+		} catch (...) {
+		}
+
+		if (n.is_weight())
+			param_count = static_cast<std::size_t>(n.rows() * n.cols());
+		else if (n.is_bias())
+			param_count = static_cast<std::size_t>(n.cols());
+
+		layers.push_back({std::string{n.name()}, shape_str, param_count});
+
+		for (auto *input : n.get_all_inputs()) {
+			store_node(*input);
+		}
+	}
+
+public:
+#define X(NodeType)                                                            \
+	void visit(NodeType &node) override { store_node(node); }
+	EXGRAF_NODE_LIST(T)
+#undef X
+
+	auto finalise() -> void {
+		fmt::print("{:<25} {:<15} {:<10}\n", "Layer", "Shape", "Params");
+		fmt::print("{}\n", std::string(25 + 15 + 10 + 2, '-'));
+		for (auto &l : layers) {
+			fmt::print("{:<25} {:<15} {:<10}\n", l.layer_name, l.shape,
+								 l.param_count);
 		}
 	}
 };

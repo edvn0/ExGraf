@@ -14,6 +14,71 @@
 
 namespace ExGraf {
 
+namespace ExGraf::detail {
+static std::mutex allocation_mutex;
+static std::unordered_map<void *, bool> allocations;
+
+inline auto report_leaks() -> void {
+	std::lock_guard lock(allocation_mutex);
+	for (auto &&[ptr, could] : allocations) {
+		if (!could) {
+			fmt::print("Memory leak at {}\n", fmt::ptr(ptr));
+		}
+	}
+}
+
+template <typename T> struct TrackingAllocator {
+	using value_type = T;
+	TrackingAllocator() = default;
+	template <typename U>
+	explicit TrackingAllocator(const TrackingAllocator<U> &) {}
+
+	auto allocate(std::size_t n) -> T * {
+		auto ptr = static_cast<T *>(::operator new(n * sizeof(T)));
+		{
+			std::lock_guard lock(allocation_mutex);
+			allocations[ptr] = false;
+		}
+		return ptr;
+	}
+
+	auto deallocate(T *ptr, std::size_t) -> void {
+		{
+			std::lock_guard lock(allocation_mutex);
+			auto it = allocations.find(ptr);
+			if (it != allocations.end()) {
+				if (it->second) {
+					fmt::print("Double free at {}\n", fmt::ptr(ptr));
+				} else {
+					it->second = true;
+				}
+			}
+		}
+		::operator delete(ptr);
+	}
+};
+
+template <typename T, typename U>
+inline bool operator==(const TrackingAllocator<T> &,
+											 const TrackingAllocator<U> &) {
+	return true;
+}
+
+template <typename T, typename U>
+inline bool operator!=(const TrackingAllocator<T> &,
+											 const TrackingAllocator<U> &) {
+	return false;
+}
+} // namespace ExGraf::detail
+
+struct InvalidInputShapeError : std::logic_error {
+	using std::logic_error::logic_error;
+};
+
+struct UnsupportedOperationError : std::runtime_error {
+	using std::runtime_error::runtime_error;
+};
+
 enum class ActivationFunction : std::uint8_t {
 	ReLU,
 };
@@ -78,8 +143,8 @@ public:
 		for (std::size_t i = 0; i < layer_sizes.size() - 1; ++i) {
 			std::uint32_t output_size = layer_sizes[i + 1];
 			auto layer = add_layer(current_layer, current_size, output_size);
-			const auto is_last_layer = i < layer_sizes.size() - 2;
-			if (!is_last_layer) {
+			if (const auto is_last_layer = i < layer_sizes.size() - 2;
+					!is_last_layer) {
 				current_layer = add_node<ReLU<T>>(layer);
 			} else {
 				current_layer = layer;
@@ -95,36 +160,40 @@ public:
 			predictor = add_node<ReLU<T>>(current_layer);
 			break;
 		default:
-			throw std::runtime_error("Unsupported output activation function");
+			throw UnsupportedOperationError("Unsupported output activation function");
 		}
 
 		// Loss function
 		switch (config.loss_function) {
 		case LossFunction::CrossEntropy: {
-			auto loss_output = add_node<CrossEntropyLoss<T>>(predictor, y);
-			this->output = loss_output;
+			// op = Sum(Sum(Hadamard(Negate(Y), log(P)), axis=1), axis=0)
+			auto negate = add_node<Neg<T>>(y);
+			auto log = add_node<Log<T>>(predictor);
+			auto hadamard = add_node<Hadamard<T>>(negate, log);
+			auto sum_axis_1 = add_node<SumAxis<T>>(hadamard, 1);
+			output = add_node<SumAxis<T>>(sum_axis_1, 0);
 			break;
 		}
 		default:
-			throw std::runtime_error("Unsupported loss function");
+			throw UnsupportedOperationError("Unsupported loss function");
 		}
 	}
 
 	arma::Mat<T> predict(const arma::Mat<T> &input_matrix) {
 		if (input_matrix.n_cols != layer_sizes[0]) {
-			throw std::logic_error(fmt::format(
-					"Expected input shape (N, {}), but got ({} x {})", layer_sizes[0],
-					input_matrix.n_rows, input_matrix.n_cols));
+			throw InvalidInputShapeError(
+					"Input shape does not match model input size");
 		}
 		get_placeholder("X")->set_value(input_matrix);
 		return predictor->forward();
 	}
 
-	auto learn(const arma::Mat<T> &labels) -> arma::Mat<T> {
-		arma::Mat<T> loss_gradient = arma::Mat<T>(10, 1, arma::fill::ones);
+	auto train(const arma::Mat<T> &labels) -> arma::Mat<T> {
 		get_placeholder("Y")->set_value(labels);
-		output->backward(loss_gradient);
-		return arma::Mat<T>{1, 1};
+		auto loss = output->forward();
+		arma::Mat<T> grad(1, 1, arma::fill::ones);
+		output->backward(grad);
+		return loss;
 	}
 
 	template <typename Visitor, typename... Args> auto visit(Args &&...args) {
@@ -152,14 +221,22 @@ public:
 		assert(placeholders.contains(id));
 		return placeholders.at(id);
 	}
+
 	auto add_placeholder(const std::string &id) -> Placeholder<T> * {
+		assert(!placeholders.contains(id));
 		auto *placeholder = add_node<Placeholder<T>>(id);
 		placeholders[id] = placeholder;
 		return placeholder;
 	}
+
 	auto add_layer(Node<T> *input_node, std::unsigned_integral auto input_nodes,
 								 std::unsigned_integral auto output_nodes) {
 		assert(input_node);
+
+		// Maps a (Samples, Features (input_nodes)) matrix to a (Samples,
+		// output_nodes). via z = XW + B, where sizeof(W) = (input_nodes,
+		// output_nodes) and sizeof(B) = (output_nodes, 1). The operation on this
+		// layer should return a (Samples, output_nodes) matrix.
 
 		auto B = add_variable(randn_matrix<T>(output_nodes, 1));
 		auto W = add_variable(randn_matrix<T>(output_nodes, input_nodes));
@@ -170,7 +247,9 @@ public:
 
 private:
 	std::vector<std::uint32_t> layer_sizes;
-	std::vector<std::unique_ptr<Node<T>>> nodes;
+	std::vector<std::unique_ptr<Node<T>>,
+							ExGraf::detail::TrackingAllocator<std::unique_ptr<Node<T>>>>
+			nodes;
 	std::unordered_map<std::string, Placeholder<T> *> placeholders;
 	Placeholder<T> *input;
 	Node<T> *output;

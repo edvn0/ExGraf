@@ -11,6 +11,10 @@
 
 namespace ExGraf {
 
+struct MissingValueError : public std::logic_error {
+	using std::logic_error::logic_error;
+};
+
 enum class NodeType : std::uint8_t {
 	Variable,
 	Placeholder,
@@ -19,6 +23,10 @@ enum class NodeType : std::uint8_t {
 	Softmax,
 	CrossEntropyLoss,
 	ReLU,
+	Sum,
+	Negate,
+	Log,
+	Hadamard,
 };
 
 template <AllowedTypes T> class Node {
@@ -69,12 +77,12 @@ public:
 	auto get_all_inputs() const { return std::span(inputs); }
 	auto rows() const {
 		if (!value)
-			throw std::runtime_error("What");
+			throw MissingValueError("Value not set");
 		return value->n_rows;
 	}
 	auto cols() const {
 		if (!value)
-			throw std::runtime_error("What");
+			throw MissingValueError("Value not set");
 		return value->n_cols;
 	}
 	auto is_bias() const -> bool {
@@ -90,6 +98,12 @@ public:
 		return false;
 	}
 	auto has_value() const { return value.has_value(); }
+
+	auto get_value() const {
+		if (!has_value())
+			throw MissingValueError("Value not set");
+		return *value;
+	}
 
 	friend class ExpressionGraph<T>;
 };

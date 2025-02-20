@@ -17,7 +17,11 @@ namespace ExGraf {
 	X(Mult<T>)                                                                   \
 	X(ReLU<T>)                                                                   \
 	X(Softmax<T>)                                                                \
-	X(CrossEntropyLoss<T>)
+	X(CrossEntropyLoss<T>)                                                       \
+	X(SumAxis<T>)                                                                \
+	X(Log<T>)                                                                    \
+	X(Neg<T>)                                                                    \
+	X(Hadamard<T>)
 
 // Visitor Interface Using X-Macro
 template <AllowedTypes T> class NodeVisitor {
