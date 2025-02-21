@@ -6,6 +6,7 @@
 #include <armadillo>
 #include <exgraf.hpp>
 #include <fmt/format.h>
+#include <iostream>
 #include <random>
 #include <vector>
 
@@ -30,6 +31,11 @@ auto batch_predict(ExpressionGraph<T> &graph, const arma::Mat<double> &images,
 			batch_labels.row(i) = labels.row(idx);
 		}
 		auto output = graph.predict(batch_images);
+
+		arma::Mat<T> transposed = output.t();
+		transposed.transform([](auto &x) { return x < 1e-4 ? 0.0 : x; });
+		transposed.print(std::cout);
+
 		T batch_loss = graph.train(batch_labels)(0, 0);
 		epoch_loss += batch_loss * static_cast<T>(current_batch_size);
 		for (size_t i = 0; i < current_batch_size; ++i) {
@@ -78,7 +84,7 @@ auto compute_metrics(const arma::Mat<size_t> &confusion) -> Metrics {
 
 int main(int, char **, char **) {
 	using T = double;
-	ExpressionGraph<T> graph({784, 256, 10});
+	ExpressionGraph<T> graph({784, 3, 10});
 	graph.compile_model({
 			.input_size =
 					{

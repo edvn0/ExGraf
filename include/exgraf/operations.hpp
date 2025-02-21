@@ -39,7 +39,7 @@ public:
 
 		trace("Hadamard::forward - Result shape: ({}, {})", result.n_rows,
 					result.n_cols);
-		this->value = result;
+		this->value = std::move(result);
 		return *this->value;
 	}
 
@@ -101,7 +101,7 @@ public:
 
 		trace("Mult::forward - Result shape: ({}, {})", result.n_rows,
 					result.n_cols);
-		this->value = result;
+		this->value = std::move(result);
 		return *this->value;
 	}
 
@@ -180,7 +180,7 @@ public:
 
 		trace("Add::forward - Result shape: ({}, {})", result.n_rows,
 					result.n_cols);
-		this->value = result;
+		this->value = std::move(result);
 		return *this->value;
 	}
 
@@ -242,7 +242,7 @@ public:
 
 		trace("ReLU::forward - Result shape: ({}, {})", result.n_rows,
 					result.n_cols);
-		this->value = result;
+		this->value = std::move(result);
 		return *this->value;
 	}
 
@@ -289,21 +289,21 @@ public:
 
 	auto forward() -> arma::Mat<T> override {
 		auto x = this->inputs[0]->forward();
-		arma::Mat<T> y;
+		arma::Mat<T> result;
 		if (axis == 0) {
-			y = arma::sum(x, 0);
-			if (y.n_rows != 1)
-				y = y.t();
+			result = arma::sum(x, 0);
+			if (result.n_rows != 1)
+				result = result.t();
 		} else if (axis == 1) {
-			y = arma::sum(x, 1);
-			if (y.n_cols != 1)
-				y = y.t();
+			result = arma::sum(x, 1);
+			if (result.n_cols != 1)
+				result = result.t();
 		} else {
 			T total = arma::accu(x);
-			y.set_size(1, 1);
-			y(0, 0) = total;
+			result.set_size(1, 1);
+			result(0, 0) = total;
 		}
-		this->value = y;
+		this->value = std::move(result);
 		return *this->value;
 	}
 
@@ -334,8 +334,8 @@ public:
 	auto forward() -> arma::Mat<T> override {
 		auto x = this->inputs[0]->forward();
 		trace("Log::forward - Input shape: ({}, {})", x.n_rows, x.n_cols);
-		arma::Mat<T> y = arma::log(x);
-		this->value = y;
+		arma::Mat<T> result = arma::log(x);
+		this->value = std::move(result);
 		return *this->value;
 	}
 
@@ -359,8 +359,8 @@ public:
 	auto forward() -> arma::Mat<T> override {
 		auto x = this->inputs[0]->forward();
 		trace("Neg::forward - Input shape: ({}, {})", x.n_rows, x.n_cols);
-		arma::Mat<T> y = -x;
-		this->value = y;
+		arma::Mat<T> result = -x;
+		this->value = std::move(result);
 		return *this->value;
 	}
 
@@ -406,7 +406,7 @@ public:
 		result(0, 0) = total_loss;
 
 		trace("CrossEntropyLoss::forward - Loss value: {}", total_loss);
-		this->value = result;
+		this->value = std::move(result);
 		return *this->value;
 	}
 
@@ -460,7 +460,7 @@ public:
 		trace("Softmax::forward - Result shape: ({}, {})", result.n_rows,
 					result.n_cols);
 
-		this->value = result;
+		this->value = std::move(result);
 		return *this->value;
 	}
 

@@ -18,13 +18,13 @@ digraph ExpressionGraph {
   node11 [label="Mult\n(?, ?)", style=filled, fillcolor=white];
   node12 [label="X\n(?, ?)", style=filled, fillcolor=gold];
   node12 -> node11;
-  node13 [label="Weight\n(784, 256)", style=filled, fillcolor=lightgreen];
+  node13 [label="Weight\n(784, 3)", style=filled, fillcolor=lightgreen];
   node13 -> node11;
   node11 -> node10;
-  node14 [label="Bias\n(1, 256)", style=filled, fillcolor=lightblue];
+  node14 [label="Bias\n(1, 3)", style=filled, fillcolor=lightblue];
   node14 -> node10;
   node10 -> node9;
-  node15 [label="Weight\n(256, 10)", style=filled, fillcolor=lightgreen];
+  node15 [label="Weight\n(3, 10)", style=filled, fillcolor=lightgreen];
   node15 -> node9;
   node9 -> node8;
   node16 [label="Bias\n(1, 10)", style=filled, fillcolor=lightblue];

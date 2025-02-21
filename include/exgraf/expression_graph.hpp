@@ -116,7 +116,10 @@ arma::Mat<T> initialize_weights(std::uint32_t input_size,
 template <AllowedTypes T> class ExpressionGraph {
 public:
 	ExpressionGraph(const std::initializer_list<std::uint32_t> &sizes)
-			: layer_sizes(sizes) {}
+			: layer_sizes(sizes) {
+		static constexpr auto max_nodes = 1024;
+		nodes.reserve(max_nodes);
+	}
 
 	struct ModelConfig {
 		static constexpr auto unused = ~std::int32_t(0);
@@ -166,12 +169,12 @@ public:
 		// Loss function
 		switch (config.loss_function) {
 		case LossFunction::CrossEntropy: {
-			// op = Sum(Sum(Hadamard(Negate(Y), log(P)), axis=1), axis=0)
-			auto negate = add_node<Neg<T>>(y);
+			// op = Negate(Sum(Sum(Hadamard(Y, log(P)), axis=1), axis=0))
 			auto log = add_node<Log<T>>(predictor);
-			auto hadamard = add_node<Hadamard<T>>(negate, log);
+			auto hadamard = add_node<Hadamard<T>>(y, log);
 			auto sum_axis_1 = add_node<SumAxis<T>>(hadamard, 1);
-			output = add_node<SumAxis<T>>(sum_axis_1, 0);
+			auto sum_axis_2 = add_node<SumAxis<T>>(sum_axis_1, 0);
+			output = add_node<Neg<T>>(sum_axis_2);
 			break;
 		}
 		default:
