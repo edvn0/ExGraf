@@ -1,6 +1,8 @@
 #include "exgraf/allowed_types.hpp"
 #include "exgraf/expression_graph.hpp"
 #include "exgraf/operations.hpp"
+#include "exgraf/optimizers/adam_optimizer.hpp"
+#include "exgraf/optimizers/sgd_optimizer.hpp"
 #include "exgraf/placeholder.hpp"
 #include "exgraf/variable.hpp"
 #include "exgraf/visitors/graphviz.hpp"
@@ -28,6 +30,15 @@ EXGRAF_ALLOWED_TYPES
 #undef X
 
 #define X(T) template class GraphvizVisitor<T>;
+EXGRAF_ALLOWED_TYPES
+#undef X
+
+// Optimizers
+#define X(T) template class SGDOptimizer<T>;
+EXGRAF_ALLOWED_TYPES
+#undef X
+
+#define X(T) template class ADAMOptimizer<T>;
 EXGRAF_ALLOWED_TYPES
 #undef X
 

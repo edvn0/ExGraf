@@ -94,7 +94,8 @@ TEST_CASE("FS::decompress_gzip") {
 	std::string test_file = temp_dir + "/test_gzip.gz";
 
 	std::string cmd = "echo 'hello world' | gzip > " + test_file;
-	system(cmd.c_str());
+	auto res = system(cmd.c_str());
+	(void)res;
 	auto compressed_data = ExGraf::FS::read_file(test_file);
 
 	auto decompressed_data = ExGraf::FS::decompress_gzip(compressed_data);

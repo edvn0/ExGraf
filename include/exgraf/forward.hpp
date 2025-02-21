@@ -17,6 +17,8 @@ template <AllowedTypes T> class Log;
 template <AllowedTypes T> class Neg;
 template <AllowedTypes T> class Hadamard;
 
+template <AllowedTypes T> class Optimizer;
+
 template <AllowedTypes T> class ExpressionGraph;
 
 } // namespace ExGraf

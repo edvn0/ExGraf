@@ -77,63 +77,44 @@ public:
 		visitor.visit(*this);
 	}
 
-	arma::Mat<T> forward() override {
-		auto lhs = this->inputs[0]->forward();
-		auto rhs = this->inputs[1]->forward();
+	auto forward() -> arma::Mat<T> override {
+		auto lhs_val = this->inputs[0]->forward();
+		auto rhs_val = this->inputs[1]->forward();
 
-		trace("Mult::forward - LHS shape: ({}, {}), RHS shape: ({}, {})",
-					lhs.n_rows, lhs.n_cols, rhs.n_rows, rhs.n_cols);
+		arma::Mat<T> lhs_b = lhs_val;
+		arma::Mat<T> rhs_b = rhs_val;
 
-		arma::Mat<T> broadcasted_lhs = lhs;
-		arma::Mat<T> broadcasted_rhs = rhs;
-
-		if (lhs.n_rows == 1 && rhs.n_rows > 1) {
-			broadcasted_lhs = arma::repmat(lhs, rhs.n_rows, 1);
-		} else if (rhs.n_cols == 1 && lhs.n_cols > 1) {
-			broadcasted_rhs = arma::repmat(rhs, 1, lhs.n_cols);
+		if (lhs_val.n_rows == 1 && rhs_val.n_rows > 1) {
+			lhs_b = arma::repmat(lhs_val, rhs_val.n_rows, 1);
+		} else if (rhs_val.n_cols == 1 && lhs_val.n_cols > 1) {
+			rhs_b = arma::repmat(rhs_val, 1, lhs_val.n_cols);
 		}
 
-		if (broadcasted_lhs.n_cols != broadcasted_rhs.n_rows) {
-			throw IncompatibleDimensionsError(broadcasted_lhs, broadcasted_rhs);
+		if (lhs_b.n_cols != rhs_b.n_rows) {
+			throw IncompatibleDimensionsError(lhs_b, rhs_b);
 		}
 
-		arma::Mat<T> result = broadcasted_lhs * broadcasted_rhs;
-
-		trace("Mult::forward - Result shape: ({}, {})", result.n_rows,
-					result.n_cols);
-		this->value = std::move(result);
-		return *this->value;
+		arma::Mat<T> &result = *this->value;
+		result = lhs_b * rhs_b;
+		return result;
 	}
 
-	void backward(const arma::Mat<T> &grad) override {
-		trace("Mult::backward - Gradient shape: ({}, {})", grad.n_rows,
-					grad.n_cols);
-
-		auto lhs = this->inputs[1]->forward();
-		auto rhs = this->inputs[0]->forward();
-
-		// Handle broadcasting in backward pass
+	auto backward(arma::Mat<T> const &grad) -> void override {
+		auto lhs_val = this->inputs[0]->forward();
+		auto rhs_val = this->inputs[1]->forward();
 		arma::Mat<T> lhs_grad;
 		arma::Mat<T> rhs_grad;
 
-		// Standard matrix multiplication gradients
-		if (lhs.n_rows == 1 && rhs.n_rows > 1) {
-			// If LHS was broadcasted
-			lhs_grad = arma::sum(grad * rhs.t(), 0);
-			rhs_grad = lhs.t() * grad;
-		} else if (rhs.n_cols == 1 && lhs.n_cols > 1) {
-			// If RHS was broadcasted
-			lhs_grad = grad * rhs.t();
-			rhs_grad = arma::sum(lhs.t() * grad, 1);
+		if (lhs_val.n_rows == 1 && rhs_val.n_rows > 1) {
+			lhs_grad = arma::sum(grad * rhs_val.t(), 0);
+			rhs_grad = arma::repmat(lhs_val, rhs_val.n_rows, 1).t() * grad;
+		} else if (rhs_val.n_cols == 1 && lhs_val.n_cols > 1) {
+			lhs_grad = grad * arma::repmat(rhs_val, 1, lhs_val.n_cols).t();
+			rhs_grad = arma::sum(lhs_val.t() * grad, 1);
 		} else {
-			// Standard case - no broadcasting
-			lhs_grad = grad.t() * rhs;
-			rhs_grad = lhs * grad.t();
+			lhs_grad = grad * rhs_val.t();
+			rhs_grad = lhs_val.t() * grad;
 		}
-
-		trace("Mult::backward - LHS gradient shape: ({}, {}), RHS gradient shape: "
-					"({}, {})",
-					lhs_grad.n_rows, lhs_grad.n_cols, rhs_grad.n_rows, rhs_grad.n_cols);
 
 		this->inputs[0]->backward(lhs_grad);
 		this->inputs[1]->backward(rhs_grad);
@@ -150,61 +131,52 @@ public:
 		visitor.visit(*this);
 	}
 
-	arma::Mat<T> forward() override {
-		auto lhs = this->inputs[0]->forward();
-		auto rhs = this->inputs[1]->forward();
+	auto forward() -> arma::Mat<T> override {
+		auto lhs_val = this->inputs[0]->forward();
+		auto rhs_val = this->inputs[1]->forward();
 
-		trace("Add::forward - LHS shape: ({}, {}), RHS shape: ({}, {})", lhs.n_rows,
-					lhs.n_cols, rhs.n_rows, rhs.n_cols);
-
-		arma::Mat<T> result;
-
-		// **Row Vector Broadcasting (1, N) + (M, N) → (M, N)**
-		if (lhs.n_rows == 1 && lhs.n_cols == rhs.n_cols && rhs.n_rows > 1) {
-			result = arma::repmat(lhs, rhs.n_rows, 1) + rhs;
-		} else if (rhs.n_rows == 1 && rhs.n_cols == lhs.n_cols && lhs.n_rows > 1) {
-			result = lhs + arma::repmat(rhs, lhs.n_rows, 1);
-		}
-		// **Column Vector Broadcasting (M, 1) + (M, N) → (M, N)**
-		else if (lhs.n_cols == 1 && lhs.n_rows == rhs.n_rows && rhs.n_cols > 1) {
-			result = arma::repmat(lhs, 1, rhs.n_cols) + rhs;
-		} else if (rhs.n_cols == 1 && rhs.n_rows == lhs.n_rows && lhs.n_cols > 1) {
-			result = lhs + arma::repmat(rhs, 1, lhs.n_cols);
-		}
-		// **Standard Addition (Matching Dimensions)**
-		else if (lhs.n_rows == rhs.n_rows && lhs.n_cols == rhs.n_cols) {
-			result = lhs + rhs;
+		arma::Mat<T> out;
+		if (lhs_val.n_rows == 1 && lhs_val.n_cols == rhs_val.n_cols &&
+				rhs_val.n_rows > 1) {
+			out = arma::repmat(lhs_val, rhs_val.n_rows, 1) + rhs_val;
+		} else if (rhs_val.n_rows == 1 && rhs_val.n_cols == lhs_val.n_cols &&
+							 lhs_val.n_rows > 1) {
+			out = lhs_val + arma::repmat(rhs_val, lhs_val.n_rows, 1);
+		} else if (lhs_val.n_cols == 1 && lhs_val.n_rows == rhs_val.n_rows &&
+							 rhs_val.n_cols > 1) {
+			out = arma::repmat(lhs_val, 1, rhs_val.n_cols) + rhs_val;
+		} else if (rhs_val.n_cols == 1 && rhs_val.n_rows == lhs_val.n_rows &&
+							 lhs_val.n_cols > 1) {
+			out = lhs_val + arma::repmat(rhs_val, 1, lhs_val.n_cols);
+		} else if (lhs_val.n_rows == rhs_val.n_rows &&
+							 lhs_val.n_cols == rhs_val.n_cols) {
+			out = lhs_val + rhs_val;
 		} else {
-			throw IncompatibleDimensionsError(lhs, rhs);
+			throw IncompatibleDimensionsError(lhs_val, rhs_val);
 		}
 
-		trace("Add::forward - Result shape: ({}, {})", result.n_rows,
-					result.n_cols);
-		this->value = std::move(result);
-		return *this->value;
+		this->value = out;
+		return out;
 	}
 
-	void backward(const arma::Mat<T> &grad) override {
-		trace("Add::backward - Gradient shape: ({}, {})", grad.n_rows, grad.n_cols);
+	auto backward(arma::Mat<T> const &grad) -> void override {
+		auto lhs_val = this->inputs[0]->forward();
+		auto rhs_val = this->inputs[1]->forward();
 
-		auto lhs_shape = this->inputs[0]->forward();
-		auto rhs_shape = this->inputs[1]->forward();
+		auto grad_lhs = grad;
+		if (lhs_val.n_rows == 1 && grad_lhs.n_rows > 1)
+			grad_lhs = arma::sum(grad_lhs, 0);
+		if (lhs_val.n_cols == 1 && grad_lhs.n_cols > 1)
+			grad_lhs = arma::sum(grad_lhs, 1);
 
-		// Handle row-vector broadcasting (1, N)
-		if (lhs_shape.n_rows == 1 && grad.n_rows > 1) {
-			arma::Mat<T> summed_grad = arma::sum(grad, 0);
-			this->inputs[0]->backward(summed_grad);
-		} else {
-			this->inputs[0]->backward(grad);
-		}
+		auto grad_rhs = grad;
+		if (rhs_val.n_rows == 1 && grad_rhs.n_rows > 1)
+			grad_rhs = arma::sum(grad_rhs, 0);
+		if (rhs_val.n_cols == 1 && grad_rhs.n_cols > 1)
+			grad_rhs = arma::sum(grad_rhs, 1);
 
-		// Handle column-vector broadcasting (M, 1)
-		if (rhs_shape.n_cols == 1 && grad.n_cols > 1) {
-			arma::Mat<T> summed_grad = arma::sum(grad, 1);
-			this->inputs[1]->backward(summed_grad);
-		} else {
-			this->inputs[1]->backward(grad);
-		}
+		this->inputs[0]->backward(grad_lhs);
+		this->inputs[1]->backward(grad_rhs);
 	}
 
 	auto name() const -> std::string_view override { return "Add"; }
@@ -226,7 +198,7 @@ public:
 		auto input = this->inputs[0]->forward();
 		trace("ReLU::forward - Input shape: ({}, {})", input.n_rows, input.n_cols);
 
-		arma::Mat<T> result;
+		arma::Mat<T> &result = *this->value;
 		if (input.n_elem == 0) {
 			throw std::runtime_error("Empty input matrix");
 		}

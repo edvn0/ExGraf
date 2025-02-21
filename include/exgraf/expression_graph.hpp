@@ -3,6 +3,9 @@
 #include "exgraf/allowed_types.hpp"
 #include "exgraf/node.hpp"
 #include "exgraf/operations.hpp"
+#include "exgraf/optimizers/adam_optimizer.hpp"
+#include "exgraf/optimizers/optimizer.hpp"
+#include "exgraf/optimizers/sgd_optimizer.hpp"
 #include "exgraf/placeholder.hpp"
 #include "exgraf/variable.hpp"
 
@@ -15,6 +18,7 @@
 namespace ExGraf {
 
 namespace ExGraf::detail {
+
 static std::mutex allocation_mutex;
 static std::unordered_map<void *, bool> allocations;
 
@@ -90,8 +94,9 @@ enum class OutputActivationFunction : std::uint8_t {
 	Softmax,
 	ReLU,
 };
-enum class Optimizer : std::uint8_t {
+enum class OptimizerType : std::uint8_t {
 	SGD,
+	ADAM,
 };
 
 template <AllowedTypes T>
@@ -114,6 +119,10 @@ arma::Mat<T> initialize_weights(std::uint32_t input_size,
 }
 
 template <AllowedTypes T> class ExpressionGraph {
+	using Var = Variable<T>;
+	using Ph = Placeholder<T>;
+	using Mat = arma::Mat<T>;
+
 public:
 	ExpressionGraph(const std::initializer_list<std::uint32_t> &sizes)
 			: layer_sizes(sizes) {
@@ -133,12 +142,15 @@ public:
 		LossFunction loss_function{LossFunction::CrossEntropy};
 		OutputActivationFunction output_activation_function{
 				OutputActivationFunction::Softmax};
-		Optimizer optimizer{Optimizer::SGD};
 	};
-	auto compile_model(const ModelConfig &config) -> void {
+	template <typename Opt, typename... OptimizerArgs>
+	auto compile_model(const ModelConfig &config, OptimizerArgs &&...args)
+			-> void {
 		auto x = add_placeholder("X");
 		auto y = add_placeholder("Y");
 		input = x;
+
+		optimizer = std::make_unique<Opt>(std::forward<OptimizerArgs>(args)...);
 
 		Node<T> *current_layer = x;
 		std::uint32_t current_size = layer_sizes[0];
@@ -182,7 +194,11 @@ public:
 		}
 	}
 
-	arma::Mat<T> predict(const arma::Mat<T> &input_matrix) {
+	auto compile_model(const ModelConfig &config) {
+		return compile_model<SGDOptimizer<T>>(config);
+	}
+
+	Mat predict(const Mat &input_matrix) {
 		if (input_matrix.n_cols != layer_sizes[0]) {
 			throw InvalidInputShapeError(
 					"Input shape does not match model input size");
@@ -191,11 +207,13 @@ public:
 		return predictor->forward();
 	}
 
-	auto train(const arma::Mat<T> &labels) -> arma::Mat<T> {
+	auto train(const Mat &labels) -> Mat {
 		get_placeholder("Y")->set_value(labels);
 		auto loss = output->forward();
-		arma::Mat<T> grad(1, 1, arma::fill::ones);
+		Mat grad(1, 1, arma::fill::ones);
 		output->backward(grad);
+		auto trainable_nodes = gather_trainable_nodes();
+		optimizer->step(std::span(trainable_nodes));
 		return loss;
 	}
 
@@ -253,8 +271,9 @@ private:
 	std::vector<std::unique_ptr<Node<T>>,
 							ExGraf::detail::TrackingAllocator<std::unique_ptr<Node<T>>>>
 			nodes;
-	std::unordered_map<std::string, Placeholder<T> *> placeholders;
-	Placeholder<T> *input;
+	std::unordered_map<std::string, Ph *> placeholders;
+	std::unique_ptr<Optimizer<T>> optimizer;
+	Ph *input;
 	Node<T> *output;
 	Node<T> *predictor;
 
@@ -266,8 +285,18 @@ private:
 		return ptr;
 	}
 
-	Variable<T> *add_variable(const arma::Mat<T> &initial_value) {
+	auto add_variable(const arma::Mat<T> &initial_value) -> Var * {
 		return add_node<Variable<T>>(initial_value);
+	}
+
+	auto gather_trainable_nodes() -> std::vector<Var *> {
+		std::vector<Var *> trainable_nodes;
+		for (auto &node : nodes) {
+			if (auto *variable = dynamic_cast<Var *>(node.get()); variable) {
+				trainable_nodes.push_back(variable);
+			}
+		}
+		return trainable_nodes;
 	}
 };
 

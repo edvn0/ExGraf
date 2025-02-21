@@ -2,8 +2,6 @@
 
 #include "exgraf/node.hpp"
 
-#include <fmt/core.h>
-
 namespace ExGraf {
 
 template <AllowedTypes T> class Variable : public Node<T> {
@@ -34,11 +32,11 @@ public:
 	}
 
 	auto backward(const arma::Mat<T> &grad) -> void override {
-		trace("Variable::backward - Gradient shape: ({}, {})", grad.n_rows,
-					grad.n_cols);
+		info("Variable::backward - Gradient shape: ({}, {})", grad.n_rows,
+				 grad.n_cols);
 		this->gradient += grad; // Accumulate gradient for updates
-		trace("Variable::backward - Accumulated gradient shape: ({}, {})",
-					this->gradient.n_rows, this->gradient.n_cols);
+		info("Variable::backward - Accumulated gradient shape: ({}, {})",
+				 this->gradient.n_rows, this->gradient.n_cols);
 	}
 };
 

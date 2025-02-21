@@ -31,16 +31,11 @@ auto batch_predict(ExpressionGraph<T> &graph, const arma::Mat<double> &images,
 			batch_labels.row(i) = labels.row(idx);
 		}
 		auto output = graph.predict(batch_images);
-
-		arma::Mat<T> transposed = output.t();
-		transposed.transform([](auto &x) { return x < 1e-4 ? 0.0 : x; });
-		transposed.print(std::cout);
-
 		T batch_loss = graph.train(batch_labels)(0, 0);
 		epoch_loss += batch_loss * static_cast<T>(current_batch_size);
 		for (size_t i = 0; i < current_batch_size; ++i) {
-			arma::uword pred_label;
-			arma::uword true_label;
+			arma::uword pred_label{};
+			arma::uword true_label{};
 			output.row(i).max(pred_label);
 			batch_labels.row(i).max(true_label);
 			confusion_matrix(true_label, pred_label)++;
@@ -79,19 +74,25 @@ auto compute_metrics(const arma::Mat<size_t> &confusion) -> Metrics {
 		recalls[i] = (tp + fn == 0) ? 0.0 : double(tp) / double(tp + fn);
 		fprs[i] = (fp + tn == 0) ? 0.0 : double(fp) / double(fp + tn);
 	}
-	return {ppvs, fprs, recalls};
+	return {
+			std::move(ppvs),
+			std::move(fprs),
+			std::move(recalls),
+	};
 }
 
 int main(int, char **, char **) {
 	using T = double;
 	ExpressionGraph<T> graph({784, 3, 10});
-	graph.compile_model({
-			.input_size =
-					{
-							ExpressionGraph<T>::ModelConfig::unused,
-							784,
-					},
-	});
+	graph.compile_model<SGDOptimizer<T>>(
+			{
+					.input_size =
+							{
+									ExpressionGraph<T>::ModelConfig::unused,
+									784,
+							},
+			},
+			0.1);
 
 	auto &&[images, labels] =
 			MNIST::load("https://raw.githubusercontent.com/fgnt/mnist/master/"
@@ -100,7 +101,7 @@ int main(int, char **, char **) {
 									"t10k-labels-idx1-ubyte.gz");
 
 	size_t num_samples = images.n_rows;
-	size_t num_epochs = 5;
+	size_t num_epochs = 200;
 	size_t batch_size = 32;
 	std::vector<size_t> indices(num_samples);
 	std::ranges::iota(indices, 0);
@@ -131,5 +132,6 @@ int main(int, char **, char **) {
 							 epoch + 1, num_epochs, epoch_loss, accuracy * 100.0, mean_ppv,
 							 mean_fpr, mean_recall);
 	}
+
 	return 0;
 }

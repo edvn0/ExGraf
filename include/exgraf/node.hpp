@@ -34,7 +34,7 @@ protected:
 	NodeType type;
 	std::vector<Node<T> *> inputs;
 	std::vector<Node<T> *> outputs;
-	std::optional<arma::Mat<T>> value;
+	std::optional<arma::Mat<T>> value{arma::Mat<T>(0, 0)};
 	arma::Mat<T> gradient;
 
 	auto get_inputs() -> std::tuple<Node<T> *, Node<T> *> {
@@ -44,7 +44,6 @@ protected:
 		};
 	}
 
-public:
 	explicit Node(NodeType t, std::vector<Node<T> *> predecessors)
 			: type(t), inputs(std::move(predecessors)) {
 		for (auto *input : inputs) {
@@ -59,6 +58,7 @@ public:
 		}
 	}
 
+public:
 	virtual ~Node() = default;
 	virtual auto forward() -> arma::Mat<T> = 0;
 	virtual auto backward(const arma::Mat<T> &) -> void = 0;
@@ -99,13 +99,17 @@ public:
 	}
 	auto has_value() const { return value.has_value(); }
 
-	auto get_value() const {
+	auto get_value() const -> const auto & {
 		if (!has_value())
 			throw MissingValueError("Value not set");
 		return *value;
 	}
 
-	friend class ExpressionGraph<T>;
+	auto get_value() -> auto & {
+		if (!has_value())
+			throw MissingValueError("Value not set");
+		return *value;
+	}
 };
 
 } // namespace ExGraf

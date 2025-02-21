@@ -112,9 +112,9 @@ auto MultithreadedDownloadClient::download_span(
 	static tf::Executor executor;
 	tf::Taskflow taskflow;
 	std::vector<HttpResponse> responses(urls.size());
-	for (size_t url_index = 0; url_index < urls.size(); ++url_index) {
+	for (std::size_t url_index = 0; url_index < urls.size(); ++url_index) {
 		taskflow.emplace([&responses, url_index, this, url = urls[url_index]] {
-			responses[url_index] = client.get(url);
+			responses.at(url_index) = client.get(url);
 		});
 	}
 	executor.run(taskflow).get();

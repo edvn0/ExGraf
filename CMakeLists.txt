@@ -26,44 +26,43 @@ elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
 	set(ExGraf_Version_Status "")
 endif()
 
-
 # Enable strict compiler warnings
 set(COMMON_COMPILE_OPTIONS
-    -Wall
-    -Wextra
-    -Wpedantic
-    -Werror
-    -Wshadow
-    -Wconversion
-    -Wsign-conversion
-    -Wnon-virtual-dtor
-    -Wold-style-cast
-    -Woverloaded-virtual
-    -Wnull-dereference
-    -Wunused
+	-Wall
+	-Wextra
+	-Wpedantic
+	-Werror
+	-Wshadow
+	-Wconversion
+	-Wsign-conversion
+	-Wnon-virtual-dtor
+	-Wold-style-cast
+	-Woverloaded-virtual
+	-Wnull-dereference
+	-Wunused
 )
 
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
-    list(APPEND COMMON_COMPILE_OPTIONS
-        -Wdouble-promotion
-        -Wformat=2
-        -Wstrict-overflow=5
-        -Wundef
-        -Wcast-align
-        -Wcast-qual
-        -Wmisleading-indentation
-        -Wduplicated-cond
-        -Wduplicated-branches
-        -Wlogical-op
-        -Wuseless-cast
-    )
+	list(APPEND COMMON_COMPILE_OPTIONS
+		-Wdouble-promotion
+		-Wformat=2
+		-Wstrict-overflow=5
+		-Wundef
+		-Wcast-align
+		-Wcast-qual
+		-Wmisleading-indentation
+		-Wduplicated-cond
+		-Wduplicated-branches
+		-Wlogical-op
+		-Wuseless-cast
+	)
 elseif(CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
-    list(APPEND COMMON_COMPILE_OPTIONS
-        /W4
-        /WX
-        /permissive-
-        /sdl
-    )
+	list(APPEND COMMON_COMPILE_OPTIONS
+		/W4
+		/WX
+		/permissive-
+		/sdl
+	)
 endif()
 
 # Apply compile options globally
@@ -78,14 +77,21 @@ add_library(ExGrafHttp STATIC src/http/client.cpp)
 target_include_directories(ExGrafHttp PUBLIC include)
 target_link_libraries(ExGrafHttp PRIVATE cpr::cpr Taskflow::Taskflow)
 
+# If clang/gcc disable -Werror=null-dereference for ExGrafHttp
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+	target_compile_options(ExGrafHttp PUBLIC -Wno-null-dereference -Wno-strict-overflow)
+endif()
+
 add_library(
 	ExGraf
 	STATIC
 	src/explicit_instantiation.cpp
 	src/filesystem.cpp
+	src/loaders/mnist.cpp
 )
 target_include_directories(ExGraf PUBLIC include)
 target_link_libraries(ExGraf PRIVATE ExGrafHttp Armadillo::Armadillo spdlog::spdlog Taskflow::Taskflow)
+target_precompile_headers(ExGraf PUBLIC include/exgraf/exgraf_pch.hpp)
 
 file(COPY resources DESTINATION ${CMAKE_BINARY_DIR})
 
