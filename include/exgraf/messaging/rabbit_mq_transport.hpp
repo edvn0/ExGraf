@@ -1,6 +1,7 @@
 #pragma once
 
 #include "exgraf/messaging/bus_transport.hpp"
+#include "exgraf/visualisation/metrics_logger_base.hpp"
 
 #include <memory>
 
@@ -11,8 +12,9 @@ public:
 	explicit RabbitMQTransport(const std::string &);
 	~RabbitMQTransport();
 
-	void send_impl(const std::string_view);
+	void send_impl(const UI::MessageTo &);
 	auto shutdown() -> void;
+	auto wait_for_connection() -> void;
 
 private:
 	class RabbitMQTransportImpl;

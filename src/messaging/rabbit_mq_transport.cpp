@@ -26,12 +26,30 @@ public:
 		runner_ = std::jthread([this]() { io_ctx_.run(); });
 	}
 
-	~RabbitMQTransportImpl() { close_transport(); }
+	~RabbitMQTransportImpl() {
+		try {
+			close_transport();
+		} catch (std::exception const &e) {
+			error("Exception in ~RabbitMQTransportImpl: {}", e.what());
+		}
+	}
 
-	auto send_impl(std::string_view data) -> void {
+	static constexpr auto to_rabbitmq_exchange = [](const UI::Outbox outbox) {
+		switch (outbox) {
+		case UI::Outbox::Metrics:
+			return "metrics";
+		case UI::Outbox::ModelConfiguration:
+			return "model_configuration";
+		}
+		return "unknown";
+	};
+
+	auto send_impl(const UI::MessageTo &message) -> void {
 		if (is_connected_) {
-			AMQP::Envelope envelope(data.data(), data.size());
-			channel_.publish("metrics", "metrics", envelope);
+			AMQP::Envelope envelope(message.message.data(), message.message.size());
+			auto exchange = to_rabbitmq_exchange(message.outbox);
+			auto routing_key = exchange;
+			channel_.publish(exchange, routing_key, envelope);
 		}
 	}
 
@@ -53,6 +71,12 @@ public:
 		}
 	}
 
+	auto wait_for_connection() -> void {
+		while (!is_connected_) {
+			std::this_thread::sleep_for(std::chrono::milliseconds(100));
+		}
+	}
+
 private:
 	boost::asio::io_context io_ctx_;
 	boost::asio::executor_work_guard<boost::asio::io_context::executor_type>
@@ -70,10 +94,14 @@ RabbitMQTransport::RabbitMQTransport(std::string const &conn_string)
 
 RabbitMQTransport::~RabbitMQTransport() = default;
 
-auto RabbitMQTransport::send_impl(std::string_view message) -> void {
+auto RabbitMQTransport::send_impl(const UI::MessageTo &message) -> void {
 	impl->send_impl(message);
 }
 
 auto RabbitMQTransport::shutdown() -> void { impl->close_transport(); }
+
+auto RabbitMQTransport::wait_for_connection() -> void {
+	impl->wait_for_connection();
+}
 
 } // namespace ExGraf::Messaging

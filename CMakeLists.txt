@@ -91,6 +91,7 @@ add_library(
 	src/messaging/zero_mq_transport.cpp
 	src/messaging/rabbit_mq_transport.cpp
 	src/bus/models/metrics_message.cpp
+	src/bus/models/model_configuration.cpp
 )
 target_include_directories(ExGraf PUBLIC include)
 target_link_libraries(ExGraf PRIVATE ExGrafHttp Armadillo::Armadillo Boost::boost Boost::json asio::asio spdlog::spdlog Taskflow::Taskflow cppzmq amqpcpp libev::libev)

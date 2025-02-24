@@ -1,6 +1,7 @@
 #include "exgraf/messaging/rabbit_mq_transport.hpp"
 #include "exgraf/messaging/zero_mq_transport.hpp"
 #include "exgraf/visualisation/bus_metrics_logger.hpp"
+#include "exgraf/visualisation/metrics_logger_base.hpp"
 #include <algorithm>
 #include <armadillo>
 #include <boost/program_options.hpp>
@@ -145,7 +146,16 @@ int main(int argc, char **argv) {
 	std::string amqp_uri = fmt::format("amqp://{}:{}@{}:{}/", user_value,
 																		 password_value, host_value, port_value);
 	UI::BusMetricsLogger<Messaging::RabbitMQTransport> logger(amqp_uri);
+	logger.wait_for_connection();
 #endif
+
+	logger.write_object<Bus::Models::ModelConfiguration,
+											UI::Outbox::ModelConfiguration>({
+			.name = "MNIST",
+			.layers = std::vector<std::size_t>{784, 10, 10},
+			.optimizer = "ADAM",
+			.learning_rate = 0.001,
+	});
 
 	for (size_t epoch = 0; epoch < num_epochs; ++epoch) {
 		arma::Mat<size_t> confusion_matrix(10, 10, arma::fill::zeros);
@@ -160,7 +170,7 @@ int main(int argc, char **argv) {
 		auto mean_ppv = arma::mean(arma::vec(positive_predictive_values));
 		auto mean_fpr = arma::mean(arma::vec(fprs));
 		auto mean_recall = arma::mean(arma::vec(recalls));
-		logger.write_object<Bus::Models::MetricsMessage>({
+		logger.write_object<Bus::Models::MetricsMessage, UI::Outbox::Metrics>({
 				.epoch = static_cast<std::int32_t>(epoch + 1),
 				.loss = epoch_loss,
 				.accuracy = accuracy,

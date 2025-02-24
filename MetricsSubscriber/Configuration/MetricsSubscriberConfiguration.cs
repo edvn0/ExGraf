@@ -90,6 +90,24 @@ public static class ServiceCollectionExtensions
 		}
 	}
 
+	public class ModelConfigurationConsumer(
+		IMediator mediator,
+		ILogger<ModelConfigurationConsumer> logger) : IConsumer<ModelConfigurationMessage>
+	{
+		public async Task Consume(ConsumeContext<ModelConfigurationMessage> context)
+		{
+			var message = context.Message;
+			logger.LogInformation("Received message: {Message}", JsonSerializer.Serialize(message));
+
+			var notification = new ModelConfigurationNotification(
+				message.Name,
+				[.. message.Layers],
+				message.LearningRate);
+
+			await mediator.Publish(notification, context.CancellationToken);
+		}
+	}
+
 	public static void AddMassTransit(this IServiceCollection services)
 	{
 		services.AddSingleton<IMessageValidator<MetricsMessage>, MetricsValidator>();
@@ -127,6 +145,16 @@ public static class ServiceCollectionExtensions
 					e.UseRawJsonSerializer(isDefault: true);
 
 					e.ConfigureConsumer<MetricsConsumer>(context);
+					e.UseMessageRetry(r => r.Intervals(100, 500, 1000));
+					e.UseDelayedRedelivery(r => r.Intervals(timeSpan));
+				});
+
+				cfg.ReceiveEndpoint("model_configuration", e =>
+				{
+					e.UseRawJsonDeserializer(isDefault: true);
+					e.UseRawJsonSerializer(isDefault: true);
+
+					e.ConfigureConsumer<ModelConfigurationConsumer>(context);
 					e.UseMessageRetry(r => r.Intervals(100, 500, 1000));
 					e.UseDelayedRedelivery(r => r.Intervals(timeSpan));
 				});

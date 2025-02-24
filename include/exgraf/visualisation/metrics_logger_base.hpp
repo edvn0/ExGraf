@@ -4,6 +4,7 @@
 #include "exgraf/logger.hpp"
 
 #include <condition_variable>
+#include <cstdint>
 #include <fstream>
 #include <iostream>
 #include <mutex>
@@ -19,6 +20,13 @@ concept JsonSerializable = requires(T t, std::ostream out) {
 	{ T::to_json(t) } -> std::same_as<std::string>;
 	{ T::from_json(std::string{}) } -> std::same_as<T>;
 	{ out << t };
+};
+
+enum class Outbox : std::uint8_t { Metrics, ModelConfiguration };
+
+struct MessageTo {
+	Outbox outbox;
+	std::string message;
 };
 
 template <typename Derived> class MetricsLoggerBase {
@@ -38,7 +46,7 @@ public:
 		}
 	}
 
-	template <AllowedTypes T>
+	template <AllowedTypes T, Outbox O>
 	void log(std::size_t epoch, T loss, T accuracy, T ppv, T fpr, T recall) {
 		std::ostringstream ss;
 
@@ -51,17 +59,17 @@ public:
 
 		{
 			std::lock_guard lock(mutex);
-			log_queue.push(ss.str());
+			log_queue.push({O, ss.str()});
 		}
 		cv.notify_one();
 	}
 
-	template <JsonSerializable T> void write_object(T &&object) {
+	template <JsonSerializable T, Outbox O> void write_object(T &&object) {
 		std::ostringstream ss;
 		ss << std::forward<T>(object) << "\n";
 		{
 			std::lock_guard lock(mutex);
-			log_queue.push(ss.str());
+			log_queue.push({O, ss.str()});
 		}
 		cv.notify_one();
 	}
@@ -73,9 +81,14 @@ public:
 		}
 	}
 
+	auto wait_for_connection() -> void {
+		static_cast<Derived &>(*this).wait_for_connection_impl();
+	}
+
 private:
 	bool done{false};
-	std::queue<std::string> log_queue;
+
+	std::queue<MessageTo> log_queue;
 	std::mutex mutex;
 	std::condition_variable cv;
 	std::jthread writer_thread;

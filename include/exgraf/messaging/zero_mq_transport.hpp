@@ -11,7 +11,7 @@ public:
 	explicit ZeroMQTransport(const std::string &);
 	~ZeroMQTransport();
 
-	void send_impl(const std::string_view);
+	void send_impl(const UI::MessageTo &);
 
 private:
 	class ZeroMQTransportImpl;

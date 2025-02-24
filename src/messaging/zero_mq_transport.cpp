@@ -13,8 +13,8 @@ public:
 		socket_.bind(address);
 	}
 
-	void send(const std::string_view msg) {
-		zmq::message_t zmq_message(msg);
+	void send(const UI::MessageTo &message) {
+		zmq::message_t zmq_message(message.message);
 		socket_.send(zmq_message, zmq::send_flags::none);
 	}
 
@@ -28,7 +28,7 @@ ZeroMQTransport::ZeroMQTransport(const std::string &address)
 
 ZeroMQTransport::~ZeroMQTransport() = default;
 
-void ZeroMQTransport::send_impl(const std::string_view message) {
+void ZeroMQTransport::send_impl(const UI::MessageTo &message) {
 	impl->send(message);
 }
 

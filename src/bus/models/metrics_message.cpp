@@ -1,6 +1,7 @@
 #include "exgraf/exgraf_pch.hpp"
 
 #include "exgraf/bus/models/metrics_message.hpp"
+#include "exgraf/bus/models/model_configuration.hpp"
 
 #include <boost/json.hpp>
 
@@ -14,6 +15,12 @@ auto MetricsMessage::to_json(const MetricsMessage &msg) -> std::string {
 	obj["meanPPV"] = msg.mean_ppv;
 	obj["meanFPR"] = msg.mean_fpr;
 	obj["meanRecall"] = msg.mean_recall;
+
+	if (msg.model_configuration) {
+		obj["modelConfiguration"] = boost::json::parse(
+				ModelConfiguration::to_json(*msg.model_configuration));
+	}
+
 	return boost::json::serialize(obj);
 }
 
@@ -26,12 +33,10 @@ auto MetricsMessage::from_json(const std::string &json) -> MetricsMessage {
 	msg.mean_ppv = obj.at("meanPPV").as_double();
 	msg.mean_fpr = obj.at("meanFPR").as_double();
 	msg.mean_recall = obj.at("meanRecall").as_double();
-	return msg;
-}
 
-auto operator<<(std::ostream &os, const MetricsMessage &msg) -> std::ostream & {
-	auto json = MetricsMessage::to_json(msg);
-	return os << json;
+	// Don't parse model configuration here, as it's a separate message
+
+	return msg;
 }
 
 } // namespace ExGraf::Bus::Models

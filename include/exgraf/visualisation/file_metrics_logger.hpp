@@ -17,8 +17,8 @@ public:
 		stream.flush();
 	}
 
-	void write_log(const std::string_view log_entry) {
-		stream << log_entry;
+	void write_log(const MessageTo &log_entry) {
+		stream << log_entry.message;
 		stream.flush();
 	}
 
