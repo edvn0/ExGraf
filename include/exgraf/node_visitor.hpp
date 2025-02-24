@@ -33,33 +33,31 @@ public:
 	virtual ~NodeVisitor() = default;
 };
 
-template <AllowedTypes T> class TopologicalVisitor : public NodeVisitor<T> {
-public:
-	~TopologicalVisitor() = default;
-#define X(NodeType)                                                            \
-	void visit(NodeType &node) override { visit_recursively(&node); }
-	EXGRAF_NODE_LIST(float)
-#undef X
-
-	virtual auto do_for_each() -> std::function<void(const Node<T> *)> = 0;
-
+template <AllowedTypes T> class SimpleVisitor : public NodeVisitor<T> {
 private:
 	std::unordered_set<const Node<T> *> visited;
+	std::function<void(Node<T> &)> func;
 
-	auto visit_recursively(const Node<T> *node) {
-		if (!node || visited.contains(node)) {
-			return;
-		}
-		visited.insert(node);
+public:
+	explicit SimpleVisitor(std::function<void(Node<T> &)> f)
+			: func(std::move(f)) {}
 
-		for (const auto *input : node->get_all_inputs()) {
-			visit_recursively(input);
-		}
+#define X(NodeType)                                                            \
+	void visit(NodeType &node) override {                                        \
+		if (visited.contains(&node))                                               \
+			return;                                                                  \
+		for (auto *input : node.get_all_inputs()) {                                \
+			input->accept(*this);                                                    \
+		}                                                                          \
+		visited.insert(&node);                                                     \
+		func(node);                                                                \
 	}
-
-	auto for_each_in_topological_order(auto &&func) {
-		std::ranges::for_each(visited, func);
-	}
+	EXGRAF_NODE_LIST(T)
+#undef X
 };
+
+template <AllowedTypes T> auto make_visitor(std::function<void(Node<T> &)> f) {
+	return SimpleVisitor<T>(std::move(f));
+}
 
 } // namespace ExGraf

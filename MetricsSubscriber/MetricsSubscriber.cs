@@ -24,14 +24,14 @@ public class MessageSubscriberBackgroundService<TNotification>(
 					if (!socket.TryReceiveMessage(TimeSpan.FromMilliseconds(100), out string message)) continue;
 
 					var maybeNotification = parser.TryParse(message);
-					if (maybeNotification != null)
+					if (maybeNotification is not null)
 					{
 						if (!validator.Validate(ref maybeNotification))
 						{
 							continue;
 						}
 
-						transformer.Transform(ref maybeNotification);
+						transformer.Transform(ref maybeNotification!);
 						await mediator.Publish(maybeNotification, stoppingToken);
 					}
 					else

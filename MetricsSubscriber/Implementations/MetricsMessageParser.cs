@@ -1,3 +1,5 @@
+using MetricsSubscriber.Models.Vertical;
+
 namespace MetricsSubscriber.Implementations;
 
 public class MetricsMessageParser : IMessageParser<MetricsUpdatedEvent>

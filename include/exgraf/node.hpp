@@ -72,7 +72,8 @@ public:
 		return dynamic_cast<const Other *>(this);
 	}
 
-	auto get_gradient() const { return gradient; }
+	auto get_gradient() const -> const auto & { return gradient; }
+	auto zero_gradient() { gradient.zeros(); }
 
 	auto get_all_inputs() const { return std::span(inputs); }
 	auto rows() const {

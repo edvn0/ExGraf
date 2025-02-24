@@ -1,13 +1,16 @@
-#include "exgraf/allowed_types.hpp"
-#include "exgraf/expression_graph.hpp"
-#include "exgraf/visitors/evaluation_order.hpp"
-#include "exgraf/visitors/graphviz.hpp"
+#include <exgraf.hpp>
+
+#include "exgraf/messaging/rabbit_mq_transport.hpp"
+#include "exgraf/messaging/zero_mq_transport.hpp"
+#include "exgraf/visualisation/bus_metrics_logger.hpp"
+
 #include <algorithm>
 #include <armadillo>
-#include <exgraf.hpp>
+
 #include <fmt/format.h>
 #include <iostream>
 #include <random>
+#include <thread>
 #include <vector>
 
 using namespace ExGraf;
@@ -83,8 +86,8 @@ auto compute_metrics(const arma::Mat<size_t> &confusion) -> Metrics {
 
 int main(int, char **, char **) {
 	using T = double;
-	ExpressionGraph<T> graph({784, 3, 10});
-	graph.compile_model<SGDOptimizer<T>>(
+	ExpressionGraph<T> graph({784, 10, 10});
+	graph.compile_model<ADAMOptimizer<T>>(
 			{
 					.input_size =
 							{
@@ -92,17 +95,17 @@ int main(int, char **, char **) {
 									784,
 							},
 			},
-			0.1);
+			0.001, 0.9, 0.99);
 
 	auto &&[images, labels] =
 			MNIST::load("https://raw.githubusercontent.com/fgnt/mnist/master/"
-									"t10k-images-idx3-ubyte.gz",
+									"train-images-idx3-ubyte.gz",
 									"https://raw.githubusercontent.com/fgnt/mnist/master/"
-									"t10k-labels-idx1-ubyte.gz");
+									"train-labels-idx1-ubyte.gz");
 
 	size_t num_samples = images.n_rows;
-	size_t num_epochs = 200;
-	size_t batch_size = 32;
+	size_t num_epochs = 300;
+	size_t batch_size = 128;
 	std::vector<size_t> indices(num_samples);
 	std::ranges::iota(indices, 0);
 	std::random_device rd;
@@ -110,8 +113,13 @@ int main(int, char **, char **) {
 
 	graph.visit<GraphvizVisitor<T>>("mnist_other.dot",
 																	VisualisationMode::LeftToRight);
-	graph.visit<GraphEvaluationVisitor<T>>();
-	graph.visit<LayerTableVisitor<T>>();
+
+#ifdef USE_ZERO_MQ
+	UI::BusMetricsLogger<Messaging::ZeroMQTransport> logger("tcp://*:5555");
+#else
+	UI::BusMetricsLogger<Messaging::RabbitMQTransport> logger(
+			"amqp://guest:guest@localhost/");
+#endif
 
 	for (size_t epoch = 0; epoch < num_epochs; ++epoch) {
 		arma::Mat<size_t> confusion_matrix(10, 10, arma::fill::zeros);
@@ -126,6 +134,9 @@ int main(int, char **, char **) {
 		const auto mean_ppv = arma::mean(arma::vec(ppvs));
 		const auto mean_fpr = arma::mean(arma::vec(fprs));
 		const auto mean_recall = arma::mean(arma::vec(recalls));
+
+		logger.log(epoch + 1, epoch_loss, accuracy * 100.0, mean_ppv, mean_fpr,
+							 mean_recall);
 
 		fmt::print("Epoch {}/{}: Loss={:.4f}, Accuracy={:.2f}%, PPV={:.4f}, "
 							 "FPR={:.4f}, Recall={:.4f}\n",

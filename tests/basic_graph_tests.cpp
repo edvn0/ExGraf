@@ -49,28 +49,4 @@ TEST_CASE("sgemm non-basic forwarrd") {
 
 	CHECK(output.n_cols == expected_colums);
 	CHECK(output.n_rows == expected_rows);
-
-	struct Visitor : public TopologicalVisitor<float> {
-		std::stringstream s;
-		~Visitor() = default;
-
-		auto do_for_each() -> std::function<void(const Node<float> *)> {
-			return [&ss = s](const Node<float> *node) {
-				if (auto *ph = node->as<Placeholder<float>>(); ph != nullptr) {
-					ss << fmt::format("Ph{}x{}", ph->rows(), ph->cols());
-				}
-				if (auto *v = node->as<Variable<float>>(); v != nullptr) {
-					ss << fmt::format("Ph{}x{}", v->rows(), v->cols());
-				}
-			};
-		}
-
-		auto finalise() { info("{}", s.str()); }
-		auto result() const { return s.str(); }
-	};
-
-	auto result = graph.visit<Visitor>();
-	(void)result;
-
-	result.clear();
 }

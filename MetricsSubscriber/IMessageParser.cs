@@ -1,8 +1,6 @@
-using MediatR;
-
 namespace MetricsSubscriber;
 
-public interface IMessageParser<out TNotification> where TNotification : INotification
+public interface IMessageParser<out TNotification>
 {
 	TNotification? TryParse(string message)
 	{
@@ -10,7 +8,7 @@ public interface IMessageParser<out TNotification> where TNotification : INotifi
 	}
 }
 
-public class DefaultParser<TNotification> : IMessageParser<TNotification> where TNotification : INotification
+public class DefaultParser<TNotification> : IMessageParser<TNotification>
 {
 	public TNotification? TryParse(string message) => default;
 }

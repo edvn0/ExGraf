@@ -32,11 +32,11 @@ public:
 	}
 
 	auto backward(const arma::Mat<T> &grad) -> void override {
-		info("Variable::backward - Gradient shape: ({}, {})", grad.n_rows,
-				 grad.n_cols);
+		trace("Variable::backward - Gradient shape: ({}, {})", grad.n_rows,
+					grad.n_cols);
 		this->gradient += grad; // Accumulate gradient for updates
-		info("Variable::backward - Accumulated gradient shape: ({}, {})",
-				 this->gradient.n_rows, this->gradient.n_cols);
+		trace("Variable::backward - Accumulated gradient shape: ({}, {})",
+					this->gradient.n_rows, this->gradient.n_cols);
 	}
 };
 

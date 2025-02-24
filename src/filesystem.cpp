@@ -1,4 +1,4 @@
-#include "exgraf/loaders/mnist.hpp"
+#include "exgraf/exgraf_pch.hpp"
 
 #include <armadillo>
 #include <array>

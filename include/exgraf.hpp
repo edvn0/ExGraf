@@ -13,4 +13,7 @@
 #include "exgraf/exporter/graphviz_exporter.hpp"
 #include "exgraf/visitors/graphviz.hpp"
 
+#include "exgraf/visualisation/bus_metrics_logger.hpp"
+#include "exgraf/visualisation/file_metrics_logger.hpp"
+
 #include "exgraf/http/client.hpp"

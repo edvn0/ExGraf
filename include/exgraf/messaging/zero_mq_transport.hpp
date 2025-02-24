@@ -1,0 +1,19 @@
+#pragma once
+
+#include "exgraf/messaging/bus_transport.hpp"
+
+namespace ExGraf::Messaging {
+
+class ZeroMQTransport : public BusTransport<ZeroMQTransport> {
+public:
+	explicit ZeroMQTransport(const std::string &);
+	~ZeroMQTransport();
+
+	void send_impl(const std::string_view);
+
+private:
+	class ZeroMQTransportImpl;
+	std::unique_ptr<ZeroMQTransportImpl> impl;
+};
+
+} // namespace ExGraf::Messaging

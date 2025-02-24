@@ -183,8 +183,8 @@ public:
 };
 
 template <AllowedTypes T> class ReLU : public Node<T> {
-	T clamp{std::numeric_limits<T>::infinity()}; // Ensures correct type usage
-	T lower{static_cast<T>(0.05)};
+	T clamp{std::numeric_limits<T>::infinity()};
+	T lower{static_cast<T>(0.05)}; // Leaky ReLU slope
 
 public:
 	explicit ReLU(Node<T> *input, T c = std::numeric_limits<T>::infinity())
@@ -198,18 +198,16 @@ public:
 		auto input = this->inputs[0]->forward();
 		trace("ReLU::forward - Input shape: ({}, {})", input.n_rows, input.n_cols);
 
-		arma::Mat<T> &result = *this->value;
 		if (input.n_elem == 0) {
 			throw std::runtime_error("Empty input matrix");
 		}
 
-		result = input;
-		result.transform([this](T val) {
-			if (val < lower)
-				return lower;
-			if (val > clamp)
-				return clamp;
-			return val;
+		arma::Mat<T> result = input;
+		result.transform([l = lower, c = clamp](T val) {
+			if (val < l) {
+				return l * val;
+			}
+			return std::min(val, c);
 		});
 
 		trace("ReLU::forward - Result shape: ({}, {})", result.n_rows,
@@ -223,15 +221,26 @@ public:
 					grad.n_cols);
 
 		auto input_values = this->inputs[0]->forward();
-
 		if (grad.n_rows != input_values.n_rows ||
 				grad.n_cols != input_values.n_cols) {
 			throw IncompatibleDimensionsError(input_values, grad);
 		}
 
-		arma::Mat<T> relu_grad(input_values.n_rows, input_values.n_cols);
-		relu_grad.transform([this](T val) { return val > lower ? 1 : 0; });
+		// Calculate derivative based on input values
+		arma::Mat<T> relu_grad =
+				arma::Mat<T>(input_values.n_rows, input_values.n_cols);
+		relu_grad.transform([this](T val) {
+			if (val < lower) {
+				return lower; // Leaky ReLU derivative for negative values
+			} else if (val > clamp) {
+				return T(0.0); // Gradient is 0 for clamped values
+			} else {
+				return T(
+						1.0); // Normal derivative for values in the pass-through region
+			}
+		});
 
+		// Apply chain rule
 		arma::Mat<T> input_grad;
 		if (grad.n_elem == 1) {
 			input_grad = grad(0, 0) * relu_grad;
@@ -241,7 +250,6 @@ public:
 
 		trace("ReLU::backward - Input gradient shape: ({}, {})", input_grad.n_rows,
 					input_grad.n_cols);
-
 		this->inputs[0]->backward(input_grad);
 	}
 

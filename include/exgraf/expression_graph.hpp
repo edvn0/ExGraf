@@ -2,6 +2,7 @@
 
 #include "exgraf/allowed_types.hpp"
 #include "exgraf/node.hpp"
+#include "exgraf/node_visitor.hpp"
 #include "exgraf/operations.hpp"
 #include "exgraf/optimizers/adam_optimizer.hpp"
 #include "exgraf/optimizers/optimizer.hpp"
@@ -128,6 +129,7 @@ public:
 			: layer_sizes(sizes) {
 		static constexpr auto max_nodes = 1024;
 		nodes.reserve(max_nodes);
+		trainable_nodes.reserve(max_nodes);
 	}
 
 	struct ModelConfig {
@@ -192,6 +194,12 @@ public:
 		default:
 			throw UnsupportedOperationError("Unsupported loss function");
 		}
+
+		for (auto &node : nodes) {
+			if (auto n = dynamic_cast<Var *>(node.get()); n != nullptr) {
+				trainable_nodes.push_back(n);
+			}
+		}
 	}
 
 	auto compile_model(const ModelConfig &config) {
@@ -211,12 +219,20 @@ public:
 		get_placeholder("Y")->set_value(labels);
 		auto loss = output->forward();
 		Mat grad(1, 1, arma::fill::ones);
-		output->backward(grad);
-		auto trainable_nodes = gather_trainable_nodes();
+		(void)output->backward(grad);
 		optimizer->step(std::span(trainable_nodes));
+
+		traverse([](Node<T> &node) { node.zero_gradient(); });
+
 		return loss;
 	}
 
+	template <typename F> void traverse(F &&f) {
+		if (output) {
+			auto visitor = make_visitor<T>(std::forward<F>(f));
+			output->accept(visitor);
+		}
+	}
 	template <typename Visitor, typename... Args> auto visit(Args &&...args) {
 		Visitor visitor{
 				std::forward<Args>(args)...,
@@ -271,6 +287,7 @@ private:
 	std::vector<std::unique_ptr<Node<T>>,
 							ExGraf::detail::TrackingAllocator<std::unique_ptr<Node<T>>>>
 			nodes;
+	std::vector<Var *> trainable_nodes;
 	std::unordered_map<std::string, Ph *> placeholders;
 	std::unique_ptr<Optimizer<T>> optimizer;
 	Ph *input;
@@ -287,16 +304,6 @@ private:
 
 	auto add_variable(const arma::Mat<T> &initial_value) -> Var * {
 		return add_node<Variable<T>>(initial_value);
-	}
-
-	auto gather_trainable_nodes() -> std::vector<Var *> {
-		std::vector<Var *> trainable_nodes;
-		for (auto &node : nodes) {
-			if (auto *variable = dynamic_cast<Var *>(node.get()); variable) {
-				trainable_nodes.push_back(variable);
-			}
-		}
-		return trainable_nodes;
 	}
 };
 

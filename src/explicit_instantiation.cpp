@@ -1,3 +1,5 @@
+#include "exgraf/exgraf_pch.hpp"
+
 #include "exgraf/allowed_types.hpp"
 #include "exgraf/expression_graph.hpp"
 #include "exgraf/operations.hpp"
@@ -21,7 +23,10 @@ EXGRAF_ALLOWED_TYPES
 	template class Add<T>;                                                       \
 	template class ReLU<T>;                                                      \
 	template class CrossEntropyLoss<T>;                                          \
-	template class Softmax<T>;
+	template class Softmax<T>;                                                   \
+	template class Neg<T>;                                                       \
+	template class SumAxis<T>;                                                   \
+	template class Hadamard<T>;
 EXGRAF_ALLOWED_TYPES
 #undef X
 

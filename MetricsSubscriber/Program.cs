@@ -1,20 +1,12 @@
 ﻿using System.Reflection;
+using MassTransit;
 using MediatR;
 using MetricsSubscriber;
 using MetricsSubscriber.Configuration;
 using MetricsSubscriber.Implementations;
+using MetricsSubscriber.Models.Vertical;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-
-using var cancellationTokenSource = new CancellationTokenSource();
-
-Console.CancelKeyPress += (sender, e) =>
-{
-	e.Cancel = true;
-	cancellationTokenSource.Cancel();
-};
-
-
 
 var host = Host.CreateDefaultBuilder()
 	.ConfigureServices((context, services) =>
@@ -23,6 +15,7 @@ var host = Host.CreateDefaultBuilder()
 		services.AddTransient<ISubscriberSocket, NetMqSubscriberSocket>();
 
 		services.AddMessageHandlingFor<MetricsUpdatedEvent, MetricsMessageParser>();
+		services.AddMetricsMassTransit();
 
 		services.AddLogging();
 	})
@@ -30,8 +23,8 @@ var host = Host.CreateDefaultBuilder()
 
 try
 {
-	await host.StartAsync(cancellationTokenSource.Token);
-	await host.WaitForShutdownAsync(cancellationTokenSource.Token);
+	await host.StartAsync();
+	await host.WaitForShutdownAsync();
 }
 finally
 {
