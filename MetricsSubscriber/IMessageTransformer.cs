@@ -2,15 +2,15 @@ using MediatR;
 
 namespace MetricsSubscriber;
 
-public interface IMessageTransformer<TNotification>
+public interface IMessageTransformer<in TNotification, out TOutput>
 {
-	void Transform(ref TNotification notification);
+	TOutput Transform(TNotification notification);
 }
 
 
-public class DefaultTransformer<TNotification> : IMessageTransformer<TNotification>
+public class DefaultTransformer<TNotification> : IMessageTransformer<TNotification, TNotification>
 {
-	public void Transform(ref TNotification notification) { }
+	public TNotification Transform(TNotification notification) { return notification; }
 }
 
 

@@ -2,6 +2,8 @@
 
 #include "exgraf/messaging/bus_transport.hpp"
 
+#include <memory>
+
 namespace ExGraf::Messaging {
 
 class ZeroMQTransport : public BusTransport<ZeroMQTransport> {

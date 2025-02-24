@@ -15,6 +15,14 @@
 		{
 			"type": "lldb",
 			"request": "launch",
+			"name": "RelWithDebInfo",
+			"program": "${workspaceFolder}/build/RelWithDebInfo/demo/ExGrafDemo",
+			"args": [],
+			"cwd": "${workspaceFolder}"
+		},
+		{
+			"type": "lldb",
+			"request": "launch",
 			"name": "Debug Tests",
 			"program": "${workspaceFolder}/build/Debug/tests/ExGrafTests",
 			"args": [],

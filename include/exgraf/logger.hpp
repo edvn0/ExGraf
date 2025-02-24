@@ -18,11 +18,9 @@ public:
 			auto log = std::make_shared<spdlog::logger>("app_logger", sink);
 			spdlog::register_logger(log);
 			log->set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%^%l%$] [thread %t] %v");
-			// read from env
+			log->set_level(spdlog::level::debug);
 			if (const auto *log_level = std::getenv("LOG_LEVEL")) {
 				log->set_level(spdlog::level::from_str(log_level));
-			} else {
-				log->set_level(spdlog::level::debug);
 			}
 
 			return log;
@@ -74,6 +72,13 @@ static auto trace(const fmt::format_string<Args...> &fmt, Args &&...args)
 		-> void {
 	Logger::instance().trace("[TRACE] {}",
 													 fmt::format(fmt, std::forward<Args>(args)...));
+}
+
+template <typename... Args>
+static auto warn(const fmt::format_string<Args...> &fmt, Args &&...args)
+		-> void {
+	Logger::instance().warn("[WARN] {}",
+													fmt::format(fmt, std::forward<Args>(args)...));
 }
 
 inline auto log_graphviz(const std::string &graphviz_content) -> void {

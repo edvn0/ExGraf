@@ -16,4 +16,6 @@
 #include "exgraf/visualisation/bus_metrics_logger.hpp"
 #include "exgraf/visualisation/file_metrics_logger.hpp"
 
+#include "exgraf/bus/models/metrics_message.hpp"
+
 #include "exgraf/http/client.hpp"

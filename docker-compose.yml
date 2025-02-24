@@ -1,13 +1,13 @@
 services:
-  training:
-    build:
-      context: .
-      dockerfile: Dockerfile.cpp
-    container_name: exgraf_training
-    networks:
-      - exgraf_network
-    depends_on:
-      - rabbitmq
+  #training:
+  #  build:
+  #    context: .
+  #    dockerfile: Dockerfile.cpp
+  #  container_name: exgraf_training
+  #  networks:
+  #    - exgraf_network
+  #  depends_on:
+  #    - rabbitmq
 
   metrics_consumer:
     build:
@@ -19,18 +19,19 @@ services:
     depends_on:
       - rabbitmq
     environment:
-      - ASPNETCORE_ENVIRONMENT=Development
-      - RabbitMQ__Host=rabbitmq
-      - RabbitMQ__Username=guest
-      - RabbitMQ__Password=guest
-      - RabbitMQ__VirtualHost=/
+      ASPNETCORE_ENVIRONMENT: Development
+      RabbitMQ__Host: rabbitmq
+      RabbitMQ__Username: guest
+      RabbitMQ__Password: guest
+      RabbitMQ__VirtualHost: "/"
+      RabbitMQ__QueueName: metrics
 
   rabbitmq:
     image: rabbitmq:3-management
     container_name: exgraf_rabbitmq
     ports:
-      - "5672:5672"   # AMQP protocol port
-      - "15672:15672" # Management UI port
+      - "5672:5672"
+      - "15672:15672"
     networks:
       - exgraf_network
     volumes:

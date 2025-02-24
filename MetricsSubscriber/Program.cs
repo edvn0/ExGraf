@@ -1,23 +1,25 @@
-﻿using System.Reflection;
-using MassTransit;
-using MediatR;
-using MetricsSubscriber;
+using System.Reflection;
 using MetricsSubscriber.Configuration;
-using MetricsSubscriber.Implementations;
-using MetricsSubscriber.Models.Vertical;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
 var host = Host.CreateDefaultBuilder()
 	.ConfigureServices((context, services) =>
 	{
-		services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(Assembly.GetExecutingAssembly()));
-		services.AddTransient<ISubscriberSocket, NetMqSubscriberSocket>();
+		var builder = new ConfigurationBuilder()
+			.SetBasePath(context.HostingEnvironment.ContentRootPath)
+			.AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
+			.AddJsonFile($"appsettings.{context.HostingEnvironment.EnvironmentName}.json", optional: true)
+			.AddEnvironmentVariables();
+		var configuration = builder.Build();
 
-		services.AddMessageHandlingFor<MetricsUpdatedEvent, MetricsMessageParser>();
-		services.AddMetricsMassTransit();
-
+		services.AddSingleton(configuration);
 		services.AddLogging();
+
+		services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(Assembly.GetExecutingAssembly()));
+		services.AddMassTransit();
+
 	})
 	.Build();
 
@@ -33,4 +35,3 @@ finally
 	else
 		host.Dispose();
 }
-

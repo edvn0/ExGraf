@@ -14,6 +14,7 @@ find_package(Boost REQUIRED)
 find_package(cppzmq REQUIRED)
 find_package(amqpcpp REQUIRED)
 find_package(asio REQUIRED)
+find_package(libev REQUIRED)
 
 message(STATUS "ExGraf Build Type: ${CMAKE_BUILD_TYPE}")
 
@@ -89,9 +90,10 @@ add_library(
 	src/loaders/mnist.cpp
 	src/messaging/zero_mq_transport.cpp
 	src/messaging/rabbit_mq_transport.cpp
+	src/bus/models/metrics_message.cpp
 )
 target_include_directories(ExGraf PUBLIC include)
-target_link_libraries(ExGraf PRIVATE ExGrafHttp Armadillo::Armadillo Boost::boost asio::asio spdlog::spdlog Taskflow::Taskflow cppzmq amqpcpp)
+target_link_libraries(ExGraf PRIVATE ExGrafHttp Armadillo::Armadillo Boost::boost Boost::json asio::asio spdlog::spdlog Taskflow::Taskflow cppzmq amqpcpp libev::libev)
 target_precompile_headers(ExGraf PUBLIC include/exgraf/exgraf_pch.hpp)
 
 file(COPY resources DESTINATION ${CMAKE_BINARY_DIR})

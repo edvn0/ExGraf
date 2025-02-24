@@ -1,12 +1,12 @@
 
-using System.Net.Mime;
-using System.Text;
+using System.Reflection;
 using System.Text.Json;
 using MassTransit;
-using MassTransit.Context;
 using MediatR;
+using MetricsSubscriber.Entity;
 using MetricsSubscriber.Models.Bus;
 using MetricsSubscriber.Models.Vertical;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -14,7 +14,6 @@ namespace MetricsSubscriber.Configuration;
 
 public static class ServiceCollectionExtensions
 {
-
 	public class MetricsValidator : IMessageValidator<MetricsMessage>
 	{
 		public bool Validate(ref readonly MetricsMessage? message)
@@ -37,9 +36,9 @@ public static class ServiceCollectionExtensions
 		}
 	}
 
-	public class MetricsTransformer : IMessageTransformer<MetricsMessage>
+	public class MetricsTransformer : IMessageTransformer<MetricsMessage, Metrics>
 	{
-		public void Transform(ref MetricsMessage message)
+		public Metrics Transform(MetricsMessage message)
 		{
 			var accuracy = message.Accuracy;
 			if (accuracy > 1)
@@ -47,19 +46,29 @@ public static class ServiceCollectionExtensions
 				accuracy /= 100.0;
 			}
 
-			message = message with { Accuracy = accuracy };
+			return new()
+			{
+				Epoch = message.Epoch,
+				Loss = message.Loss,
+				Accuracy = accuracy,
+				MeanPPV = message.MeanPPV,
+				MeanFPR = message.MeanFPR,
+				MeanRecall = message.MeanRecall,
+				ModelConfiguration = null,
+			};
 		}
 	}
 
 	public class MetricsConsumer(
 		IMediator mediator,
 		IMessageValidator<MetricsMessage> validator,
-		IMessageTransformer<MetricsMessage> transformer,
+		IMessageTransformer<MetricsMessage, Metrics> transformer,
 		ILogger<MetricsConsumer> logger) : IConsumer<MetricsMessage>
 	{
 		public async Task Consume(ConsumeContext<MetricsMessage> context)
 		{
 			var message = context.Message;
+			logger.LogInformation("Received message: {Message}", JsonSerializer.Serialize(message));
 
 			if (!validator.Validate(in message))
 			{
@@ -67,80 +76,62 @@ public static class ServiceCollectionExtensions
 				throw new ValidationException("Message validation failed");
 			}
 
-			transformer.Transform(ref message);
+			var transformed = transformer.Transform(message);
 
 			var notification = new MetricsNotification(
-				message.Epoch,
-				message.Loss,
-				message.Accuracy,
-				message.MeanPPV,
-				message.MeanFPR,
-				message.MeanRecall);
+				transformed.Epoch,
+				transformed.Loss,
+				transformed.Accuracy,
+				transformed.MeanPPV,
+				transformed.MeanFPR,
+				transformed.MeanRecall);
 
 			await mediator.Publish(notification, context.CancellationToken);
 		}
 	}
 
-
-
-	public static void AddMetricsMassTransit(this IServiceCollection services)
+	public static void AddMassTransit(this IServiceCollection services)
 	{
 		services.AddSingleton<IMessageValidator<MetricsMessage>, MetricsValidator>();
-		services.AddSingleton<IMessageTransformer<MetricsMessage>, MetricsTransformer>();
+		services.AddSingleton<IMessageTransformer<MetricsMessage, Metrics>, MetricsTransformer>();
 
 		services.AddMassTransit(x =>
 		{
-			x.AddConsumer<MetricsConsumer>();
+			// Get all consumers from the assembly
+			x.AddConsumers(Assembly.GetExecutingAssembly());
 
 			x.UsingRabbitMq((context, cfg) =>
 			{
-				cfg.Host("localhost", "/", h =>
+				var configuration = context.GetRequiredService<IConfiguration>();
+
+				var section = configuration.GetSection("RabbitMq")
+					?? throw new InvalidOperationException("RabbitMq section not found in configuration");
+				var host = section.GetValue<string>("Host")
+					?? throw new InvalidOperationException("RabbitMq Host not found in configuration");
+				var username = section.GetValue<string>("Username")
+					?? throw new InvalidOperationException("RabbitMq Username not found in configuration");
+				var password = section.GetValue<string>("Password")
+					?? throw new InvalidOperationException("RabbitMq Password not found in configuration");
+				var virtualHost = section.GetValue<string>("VirtualHost") ?? "/";
+				var timeSpan = section.GetValue<TimeSpan?>("RetryInterval") ?? TimeSpan.FromSeconds(5);
+
+				cfg.Host(host, virtualHost, h =>
 				{
-					h.Username("guest");
-					h.Password("guest");
+					h.Username(username);
+					h.Password(password);
 				});
 
-				cfg.ReceiveEndpoint("metrics_queue", e =>
+				cfg.ReceiveEndpoint("metrics", e =>
 				{
+					e.UseRawJsonDeserializer(isDefault: true);
+					e.UseRawJsonSerializer(isDefault: true);
+
 					e.ConfigureConsumer<MetricsConsumer>(context);
-
-					e.UseMessageRetry(r =>
-					{
-						r.Intervals(100, 500, 1000);
-					});
-
-					e.UseDelayedRedelivery(r =>
-					{
-						r.Intervals(TimeSpan.FromMinutes(5));
-					});
+					e.UseMessageRetry(r => r.Intervals(100, 500, 1000));
+					e.UseDelayedRedelivery(r => r.Intervals(timeSpan));
 				});
 			});
 		});
-	}
-
-	public static void AddMessageHandlingFor<T, TParse, TValidate, TTransform>(this IServiceCollection services)
-		where T : INotification
-		where TParse : class, IMessageParser<T>
-		where TValidate : class, IMessageValidator<T>
-		where TTransform : class, IMessageTransformer<T>
-	{
-		services.AddSingleton<IMessageParser<T>, TParse>();
-		services.AddSingleton<IMessageValidator<T>, TValidate>();
-		services.AddSingleton<IMessageTransformer<T>, TTransform>();
-		services.AddHostedService<MessageSubscriberBackgroundService<T>>();
-	}
-
-	public static void AddMessageHandlingFor<T, TParse>(this IServiceCollection services)
-		where T : INotification
-		where TParse : class, IMessageParser<T>
-	{
-		services.AddMessageHandlingFor<T, TParse, DefaultValidator<T>, DefaultTransformer<T>>();
-	}
-
-	public static void AddMessageHandlingFor<T>(this IServiceCollection services)
-		where T : INotification
-	{
-		services.AddMessageHandlingFor<T, DefaultParser<T>, DefaultValidator<T>, DefaultTransformer<T>>();
 	}
 }
 

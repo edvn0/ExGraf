@@ -1,6 +1,6 @@
 #pragma once
 
-#include "metrics_logger_base.hpp"
+#include "exgraf/visualisation/metrics_logger_base.hpp"
 
 namespace ExGraf::UI {
 
@@ -12,6 +12,8 @@ public:
 	void write_log(const std::string_view log_entry) {
 		transport.send(log_entry);
 	}
+
+	auto wait_for_shutdown_impl() -> void { transport.shutdown(); }
 
 private:
 	Transport transport;

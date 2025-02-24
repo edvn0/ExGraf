@@ -1,5 +1,3 @@
-#include "exgraf/exgraf_pch.hpp"
-
 #include "exgraf/http/client.hpp"
 #include "exgraf/http/response.hpp"
 

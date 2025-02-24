@@ -20,6 +20,7 @@ class ExGrafConan(ConanFile):
         self.requires("cppzmq/4.10.0")
         self.requires("amqp-cpp/4.3.26")
         self.requires("asio/1.32.0")
+        self.requires("libev/4.33")
 
     def layout(self) -> None:
         cmake_layout(self)

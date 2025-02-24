@@ -2,6 +2,8 @@
 
 #include "exgraf/messaging/bus_transport.hpp"
 
+#include <memory>
+
 namespace ExGraf::Messaging {
 
 class RabbitMQTransport : public BusTransport<RabbitMQTransport> {
@@ -10,6 +12,7 @@ public:
 	~RabbitMQTransport();
 
 	void send_impl(const std::string_view);
+	auto shutdown() -> void;
 
 private:
 	class RabbitMQTransportImpl;
