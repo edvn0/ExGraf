@@ -177,6 +177,7 @@ int main(int argc, char **argv) {
 	std::string amqp_uri = fmt::format("amqp://{}:{}@{}:{}/", user_value,
 																		 password_value, host_value, port_value);
 	Messaging::BusMetricsLogger<Messaging::RabbitMQTransport> logger(amqp_uri);
+	info("Connection uri: {}", amqp_uri);
 	logger.wait_for_connection();
 #endif
 

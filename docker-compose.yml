@@ -8,6 +8,10 @@ services:
         - exgraf_network
       depends_on:
         - rabbitmq
+      environment:
+        RABBITMQ_USER: ${RABBITMQ_USER}
+        RABBITMQ_PASS: ${RABBITMQ_PASS}
+      command: ["/app/trainer", "--user", "${RABBITMQ_USER}", "--password", "${RABBITMQ_PASS}", "--host", "rabbitmq", "--port", "5672"]
 
     metrics_consumer:
         build:

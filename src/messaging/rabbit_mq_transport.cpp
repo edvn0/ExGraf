@@ -19,7 +19,7 @@ public:
 	explicit RabbitMQTransportImpl(std::string const &conn)
 			: work_guard{boost::asio::make_work_guard(io_ctx_)}, handler{io_ctx_},
 				connection_address(AMQP::Address{conn}) {
-
+		thread = std::jthread([this] { io_ctx_.run(); });
 		setup_channel_handlers();
 		last_connect_attempt = std::chrono::steady_clock::now();
 	}
@@ -92,6 +92,8 @@ public:
 				channel.reset(new AMQP::TcpChannel(connection.get()));
 
 				setup_channel_handlers();
+
+				std::this_thread::sleep_for(retry_delay);
 
 				last_connect_attempt = std::chrono::steady_clock::now();
 				retry_count++;
