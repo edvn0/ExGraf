@@ -13,8 +13,12 @@
 #include "exgraf/exporter/graphviz_exporter.hpp"
 #include "exgraf/visitors/graphviz.hpp"
 
-#include "exgraf/visualisation/bus_metrics_logger.hpp"
-#include "exgraf/visualisation/file_metrics_logger.hpp"
+#include "exgraf/messaging/bus_metrics_logger.hpp"
+#include "exgraf/messaging/file_metrics_logger.hpp"
+
+#ifdef EXPORT_RABBIT_MQ_TRANSPORT
+#include "exgraf/messaging/rabbit_mq_transport.hpp"
+#endif
 
 #include "exgraf/bus/models/metrics_message.hpp"
 #include "exgraf/bus/models/model_configuration.hpp"

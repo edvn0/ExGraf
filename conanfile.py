@@ -1,6 +1,6 @@
 from conan import ConanFile
 from conan.tools.files import copy
-from conan.tools.cmake import CMake, cmake_layout
+from conan.tools.cmake import CMake, cmake_layout, CMakeToolchain, CMakeDeps
 import os
 
 
@@ -8,7 +8,15 @@ class ExGrafConan(ConanFile):
     name = "exgraf"
     version = "1.0"
     settings = "os", "compiler", "build_type", "arch"
-    generators = "CMakeDeps", "CMakeToolchain"
+
+	# Add compile options BUILD_TESTS
+
+    options = {
+		"BUILD_TESTS": [True, False, None]
+	}
+    default_options = {
+		"BUILD_TESTS": False
+	}
 
     def requirements(self):
         self.requires("spdlog/1.15.0")
@@ -24,6 +32,13 @@ class ExGrafConan(ConanFile):
 
     def layout(self) -> None:
         cmake_layout(self)
+
+    def generate(self):
+        deps = CMakeDeps(self)
+        deps.generate()
+        tc = CMakeToolchain(self)
+        tc.cache_variables["BUILD_TESTS"] = self.options.BUILD_TESTS
+        tc.generate()
 
     def build(self) -> None:
         cmake = CMake(self)

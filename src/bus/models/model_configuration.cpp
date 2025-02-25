@@ -16,7 +16,8 @@ auto ModelConfiguration::to_json(const ModelConfiguration &msg) -> std::string {
 	}
 	obj["optimizer"] = msg.optimizer;
 	obj["learningRate"] = msg.learning_rate;
-	return boost::json::serialize(obj);
+	const auto serialised = boost::json::serialize(obj);
+	return serialised;
 }
 
 auto ModelConfiguration::from_json(const std::string &json)

@@ -1,111 +1,60 @@
 
 using System.Reflection;
-using System.Text.Json;
 using MassTransit;
-using MediatR;
+using MetricsSubscriber.Consumers;
 using MetricsSubscriber.Entity;
 using MetricsSubscriber.Models.Bus;
-using MetricsSubscriber.Models.Vertical;
+using MetricsSubscriber.Services;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
 
 namespace MetricsSubscriber.Configuration;
 
+public class ModelPerformanceContext(DbContextOptions<ModelPerformanceContext> options) : DbContext(options)
+{
+	public DbSet<Metrics> Metrics { get; set; }
+	public DbSet<ModelConfiguration> ModelConfigurations { get; set; }
+
+	protected override void OnModelCreating(ModelBuilder modelBuilder)
+	{
+		base.OnModelCreating(modelBuilder);
+
+		modelBuilder.Entity<Metrics>(entity =>
+		{
+			entity.HasKey(e => e.Id);
+			entity.Property(e => e.Epoch).IsRequired();
+			entity.Property(e => e.Loss).IsRequired();
+			entity.Property(e => e.Accuracy).IsRequired();
+			entity.Property(e => e.MeanPPV).IsRequired();
+			entity.Property(e => e.MeanFPR).IsRequired();
+			entity.Property(e => e.MeanRecall).IsRequired();
+			entity.HasOne(e => e.ModelConfiguration)
+				.WithOne()
+				.HasForeignKey<ModelConfiguration>(e => e.Id)
+				.OnDelete(DeleteBehavior.Cascade);
+		});
+
+		modelBuilder.Entity<ModelConfiguration>(entity =>
+		{
+			entity.HasKey(e => e.Id);
+			entity.Property(e => e.Name).IsRequired();
+			entity.Property(e => e.Layers).IsRequired();
+			entity.Property(e => e.LearningRate).IsRequired();
+			entity.Property(e => e.Hash).IsRequired();
+		});
+		// Hash is unique
+		modelBuilder.Entity<ModelConfiguration>()
+			.HasIndex(e => e.Hash)
+			.IsUnique();
+	}
+}
+
 public static class ServiceCollectionExtensions
 {
-	public class MetricsValidator : IMessageValidator<MetricsMessage>
+	public static void AddEntityFramework(this IServiceCollection services, string connectionString)
 	{
-		public bool Validate(ref readonly MetricsMessage? message)
-		{
-			return message switch
-			{
-				not null => message.Epoch >= 0
-				&& message.Loss >= 0
-				&& message.Accuracy >= 0
-				&& message.Accuracy <= 100
-				&& message.MeanPPV >= 0
-				&& message.MeanPPV <= 1
-				&& message.MeanFPR >= 0
-				&& message.MeanFPR <= 1
-				&& message.MeanRecall >= 0
-				&& message.MeanRecall <= 1,
-				_ => true,
-			};
-
-		}
-	}
-
-	public class MetricsTransformer : IMessageTransformer<MetricsMessage, Metrics>
-	{
-		public Metrics Transform(MetricsMessage message)
-		{
-			var accuracy = message.Accuracy;
-			if (accuracy > 1)
-			{
-				accuracy /= 100.0;
-			}
-
-			return new()
-			{
-				Epoch = message.Epoch,
-				Loss = message.Loss,
-				Accuracy = accuracy,
-				MeanPPV = message.MeanPPV,
-				MeanFPR = message.MeanFPR,
-				MeanRecall = message.MeanRecall,
-				ModelConfiguration = null,
-			};
-		}
-	}
-
-	public class MetricsConsumer(
-		IMediator mediator,
-		IMessageValidator<MetricsMessage> validator,
-		IMessageTransformer<MetricsMessage, Metrics> transformer,
-		ILogger<MetricsConsumer> logger) : IConsumer<MetricsMessage>
-	{
-		public async Task Consume(ConsumeContext<MetricsMessage> context)
-		{
-			var message = context.Message;
-			logger.LogInformation("Received message: {Message}", JsonSerializer.Serialize(message));
-
-			if (!validator.Validate(in message))
-			{
-				logger.LogWarning("Message validation failed: {Message}", JsonSerializer.Serialize(message));
-				throw new ValidationException("Message validation failed");
-			}
-
-			var transformed = transformer.Transform(message);
-
-			var notification = new MetricsNotification(
-				transformed.Epoch,
-				transformed.Loss,
-				transformed.Accuracy,
-				transformed.MeanPPV,
-				transformed.MeanFPR,
-				transformed.MeanRecall);
-
-			await mediator.Publish(notification, context.CancellationToken);
-		}
-	}
-
-	public class ModelConfigurationConsumer(
-		IMediator mediator,
-		ILogger<ModelConfigurationConsumer> logger) : IConsumer<ModelConfigurationMessage>
-	{
-		public async Task Consume(ConsumeContext<ModelConfigurationMessage> context)
-		{
-			var message = context.Message;
-			logger.LogInformation("Received message: {Message}", JsonSerializer.Serialize(message));
-
-			var notification = new ModelConfigurationNotification(
-				message.Name,
-				[.. message.Layers],
-				message.LearningRate);
-
-			await mediator.Publish(notification, context.CancellationToken);
-		}
+		services.AddDbContext<ModelPerformanceContext>();
 	}
 
 	public static void AddMassTransit(this IServiceCollection services)
@@ -113,51 +62,49 @@ public static class ServiceCollectionExtensions
 		services.AddSingleton<IMessageValidator<MetricsMessage>, MetricsValidator>();
 		services.AddSingleton<IMessageTransformer<MetricsMessage, Metrics>, MetricsTransformer>();
 
-		services.AddMassTransit(x =>
+		services.AddMassTransit(registrationContext =>
 		{
-			// Get all consumers from the assembly
-			x.AddConsumers(Assembly.GetExecutingAssembly());
+			registrationContext.AddConsumers(Assembly.GetExecutingAssembly());
+			RegisterBusExchangesAndQueues(registrationContext);
+		});
+	}
 
-			x.UsingRabbitMq((context, cfg) =>
+	private static void RegisterBusExchangesAndQueues(IBusRegistrationConfigurator registrationContext)
+	{
+		registrationContext.UsingRabbitMq((context, cfg) =>
+		{
+			var configuration = context.GetRequiredService<IConfiguration>();
+
+			var section = configuration.GetSection("RabbitMq")
+				?? throw new InvalidOperationException("RabbitMq section not found in configuration");
+			var host = section.GetValue<string>("Host")
+				?? throw new InvalidOperationException("RabbitMq Host not found in configuration");
+			var username = section.GetValue<string>("Username")
+				?? throw new InvalidOperationException("RabbitMq Username not found in configuration");
+			var password = section.GetValue<string>("Password")
+				?? throw new InvalidOperationException("RabbitMq Password not found in configuration");
+			var virtualHost = section.GetValue<string>("VirtualHost") ?? "/";
+			var timeSpan = section.GetValue<TimeSpan?>("RetryInterval") ?? TimeSpan.FromSeconds(5);
+
+			cfg.Host(host, virtualHost, h =>
 			{
-				var configuration = context.GetRequiredService<IConfiguration>();
+				h.Username(username);
+				h.Password(password);
+			});
 
-				var section = configuration.GetSection("RabbitMq")
-					?? throw new InvalidOperationException("RabbitMq section not found in configuration");
-				var host = section.GetValue<string>("Host")
-					?? throw new InvalidOperationException("RabbitMq Host not found in configuration");
-				var username = section.GetValue<string>("Username")
-					?? throw new InvalidOperationException("RabbitMq Username not found in configuration");
-				var password = section.GetValue<string>("Password")
-					?? throw new InvalidOperationException("RabbitMq Password not found in configuration");
-				var virtualHost = section.GetValue<string>("VirtualHost") ?? "/";
-				var timeSpan = section.GetValue<TimeSpan?>("RetryInterval") ?? TimeSpan.FromSeconds(5);
+			cfg.UseRawJsonDeserializer(isDefault: true);
+			cfg.UseRawJsonSerializer(isDefault: true);
+			cfg.UseMessageRetry(r => r.Intervals(100, 500, 1000));
+			cfg.UseDelayedRedelivery(r => r.Intervals(timeSpan));
 
-				cfg.Host(host, virtualHost, h =>
-				{
-					h.Username(username);
-					h.Password(password);
-				});
+			cfg.ReceiveEndpoint("metrics", e =>
+			{
+				e.ConfigureConsumer<MetricsConsumer>(context);
+			});
 
-				cfg.ReceiveEndpoint("metrics", e =>
-				{
-					e.UseRawJsonDeserializer(isDefault: true);
-					e.UseRawJsonSerializer(isDefault: true);
-
-					e.ConfigureConsumer<MetricsConsumer>(context);
-					e.UseMessageRetry(r => r.Intervals(100, 500, 1000));
-					e.UseDelayedRedelivery(r => r.Intervals(timeSpan));
-				});
-
-				cfg.ReceiveEndpoint("model_configuration", e =>
-				{
-					e.UseRawJsonDeserializer(isDefault: true);
-					e.UseRawJsonSerializer(isDefault: true);
-
-					e.ConfigureConsumer<ModelConfigurationConsumer>(context);
-					e.UseMessageRetry(r => r.Intervals(100, 500, 1000));
-					e.UseDelayedRedelivery(r => r.Intervals(timeSpan));
-				});
+			cfg.ReceiveEndpoint("model_configuration", e =>
+			{
+				e.ConfigureConsumer<ModelConfigurationConsumer>(context);
 			});
 		});
 	}

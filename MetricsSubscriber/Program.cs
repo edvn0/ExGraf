@@ -1,5 +1,6 @@
 using System.Reflection;
 using MetricsSubscriber.Configuration;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -25,6 +26,15 @@ var host = Host.CreateDefaultBuilder()
 
 try
 {
+	var env = host.Services.GetRequiredService<IHostEnvironment>();
+	if (env.IsDevelopment())
+	{
+		using var scope = host.Services.CreateScope();
+		var services = scope.ServiceProvider;
+		var dbContext = services.GetRequiredService<ModelPerformanceContext>();
+		await dbContext.Database.MigrateAsync();
+	}
+
 	await host.StartAsync();
 	await host.WaitForShutdownAsync();
 }

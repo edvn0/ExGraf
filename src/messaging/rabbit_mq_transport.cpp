@@ -1,5 +1,9 @@
+#include "exgraf/exgraf_pch.hpp"
+
 #include "exgraf/messaging/rabbit_mq_transport.hpp"
+
 #include "exgraf/logger.hpp"
+
 #include <amqpcpp.h>
 #include <amqpcpp/address.h>
 #include <amqpcpp/libboostasio.h>
@@ -12,18 +16,18 @@ namespace ExGraf::Messaging {
 class RabbitMQTransport::RabbitMQTransportImpl {
 public:
 	explicit RabbitMQTransportImpl(std::string const &conn)
-			: work_guard_{boost::asio::make_work_guard(io_ctx_)}, handler_{io_ctx_},
-				connection_{&handler_, AMQP::Address(conn)}, channel_{&connection_} {
-		channel_.onReady([this, addr = AMQP::Address{conn}]() {
-			channel_.declareQueue("metrics", AMQP::durable);
-			channel_.declareExchange("metrics", AMQP::fanout, AMQP::durable);
-			channel_.bindQueue("metrics", "metrics", "metrics");
-			is_connected_ = true;
+			: work_guard{boost::asio::make_work_guard(io_ctx_)}, handler{io_ctx_},
+				connection{&handler, AMQP::Address(conn)}, channel{&connection} {
+		channel.onReady([this, addr = AMQP::Address{conn}]() {
+			channel.declareQueue("metrics", AMQP::durable);
+			channel.declareExchange("metrics", AMQP::fanout, AMQP::durable);
+			channel.bindQueue("metrics", "metrics", "metrics");
+			is_connected = true;
 
 			info("Connected to RabbitMQ at {}:{}", addr.hostname(), addr.port());
 		});
-		channel_.onError([](char const *msg) { error("Channel error: {}", msg); });
-		runner_ = std::jthread([this]() { io_ctx_.run(); });
+		channel.onError([](char const *msg) { error("Channel error: {}", msg); });
+		thread = std::jthread([this]() { io_ctx_.run(); });
 	}
 
 	~RabbitMQTransportImpl() {
@@ -34,45 +38,46 @@ public:
 		}
 	}
 
-	static constexpr auto to_rabbitmq_exchange = [](const UI::Outbox outbox) {
-		switch (outbox) {
-		case UI::Outbox::Metrics:
-			return "metrics";
-		case UI::Outbox::ModelConfiguration:
-			return "model_configuration";
-		}
-		return "unknown";
-	};
+	static constexpr auto to_rabbitmq_exchange =
+			[](const Messaging::Outbox outbox) {
+				switch (outbox) {
+				case Messaging::Outbox::Metrics:
+					return "metrics";
+				case Messaging::Outbox::ModelConfiguration:
+					return "model_configuration";
+				}
+				return "unknown";
+			};
 
-	auto send_impl(const UI::MessageTo &message) -> void {
-		if (is_connected_) {
+	auto send_impl(const Messaging::MessageTo &message) -> void {
+		if (is_connected) {
 			AMQP::Envelope envelope(message.message.data(), message.message.size());
 			auto exchange = to_rabbitmq_exchange(message.outbox);
 			auto routing_key = exchange;
-			channel_.publish(exchange, routing_key, envelope);
+			channel.publish(exchange, routing_key, envelope);
 		}
 	}
 
 	auto close_transport() -> void {
-		if (!closed_) {
-			if (is_connected_) {
-				channel_.close();
-				connection_.close();
+		if (!closed) {
+			if (is_connected) {
+				channel.close();
+				connection.close();
 				boost::asio::steady_timer timer(io_ctx_);
 				timer.expires_after(std::chrono::milliseconds(200));
 				timer.async_wait([](auto) {});
 				io_ctx_.run_for(std::chrono::milliseconds(250));
 			}
-			work_guard_.reset();
+			work_guard.reset();
 			io_ctx_.stop();
-			if (runner_.joinable())
-				runner_.join();
-			closed_ = true;
+			if (thread.joinable())
+				thread.join();
+			closed = true;
 		}
 	}
 
-	auto wait_for_connection() -> void {
-		while (!is_connected_) {
+	auto wait_for_connection() const -> void {
+		while (!is_connected) {
 			std::this_thread::sleep_for(std::chrono::milliseconds(100));
 		}
 	}
@@ -80,13 +85,13 @@ public:
 private:
 	boost::asio::io_context io_ctx_;
 	boost::asio::executor_work_guard<boost::asio::io_context::executor_type>
-			work_guard_;
-	AMQP::LibBoostAsioHandler handler_;
-	AMQP::TcpConnection connection_;
-	AMQP::TcpChannel channel_;
-	bool is_connected_{false};
-	bool closed_{false};
-	std::jthread runner_;
+			work_guard;
+	AMQP::LibBoostAsioHandler handler;
+	AMQP::TcpConnection connection;
+	AMQP::TcpChannel channel;
+	bool is_connected{false};
+	bool closed{false};
+	std::jthread thread;
 };
 
 RabbitMQTransport::RabbitMQTransport(std::string const &conn_string)
@@ -94,14 +99,16 @@ RabbitMQTransport::RabbitMQTransport(std::string const &conn_string)
 
 RabbitMQTransport::~RabbitMQTransport() = default;
 
-auto RabbitMQTransport::send_impl(const UI::MessageTo &message) -> void {
+auto RabbitMQTransport::send_impl(const Messaging::MessageTo &message) -> void {
 	impl->send_impl(message);
 }
 
 auto RabbitMQTransport::shutdown() -> void { impl->close_transport(); }
 
-auto RabbitMQTransport::wait_for_connection() -> void {
+auto RabbitMQTransport::wait_for_connection() const -> void {
+	info("Waiting for connection to RabbitMQ");
 	impl->wait_for_connection();
+	info("Connected to RabbitMQ");
 }
 
 } // namespace ExGraf::Messaging

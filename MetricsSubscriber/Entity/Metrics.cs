@@ -11,8 +11,6 @@ public record Metrics
 	public required double MeanPPV { get; set; }
 	public required double MeanFPR { get; set; }
 	public required double MeanRecall { get; set; }
-
-	// One to one (EF Core)
 	public required ModelConfiguration? ModelConfiguration { get; set; }
 }
 

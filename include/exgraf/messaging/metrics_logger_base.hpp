@@ -13,7 +13,7 @@
 #include <string>
 #include <thread>
 
-namespace ExGraf::UI {
+namespace ExGraf::Messaging {
 
 template <typename T>
 concept JsonSerializable = requires(T t, std::ostream out) {
@@ -46,39 +46,30 @@ public:
 		}
 	}
 
-	template <AllowedTypes T, Outbox O>
-	void log(std::size_t epoch, T loss, T accuracy, T ppv, T fpr, T recall) {
-		std::ostringstream ss;
-
-		if constexpr (std::is_same_v<T, double>) {
-			ss.precision(std::streamsize{8});
-		}
-
-		ss << epoch << "," << loss << "," << accuracy << "," << ppv << "," << fpr
-			 << "," << recall << "\n";
-
-		{
-			std::lock_guard lock(mutex);
-			log_queue.push({O, ss.str()});
-		}
-		cv.notify_one();
-	}
-
-	template <JsonSerializable T, Outbox O> void write_object(T &&object) {
+	template <JsonSerializable T, Outbox O> auto write_object(T &&object) {
 		std::ostringstream ss;
 		ss << std::forward<T>(object) << "\n";
 		{
 			std::lock_guard lock(mutex);
-			log_queue.push({O, ss.str()});
+			log_queue.emplace(O, ss.str());
+		}
+		cv.notify_one();
+	}
+	template <JsonSerializable T, Outbox O> auto write_object(const T &object) {
+		std::ostringstream ss;
+		ss << object << "\n";
+		{
+			std::lock_guard lock(mutex);
+			log_queue.emplace(O, ss.str());
 		}
 		cv.notify_one();
 	}
 
 	auto wait_for_shutdown() -> void {
-		static_cast<Derived &>(*this).wait_for_shutdown_impl();
 		if (writer_thread.joinable()) {
 			writer_thread.join();
 		}
+		static_cast<Derived &>(*this).wait_for_shutdown_impl();
 	}
 
 	auto wait_for_connection() -> void {
@@ -93,20 +84,21 @@ private:
 	std::condition_variable cv;
 	std::jthread writer_thread;
 
-	void writer_loop() {
+	auto writer_loop() {
 		while (true) {
 			std::unique_lock lock(mutex);
 			cv.wait(lock, [this] { return !log_queue.empty() || done; });
 
 			while (!log_queue.empty()) {
-				static_cast<Derived &>(*this).write_log(log_queue.front());
+				static_cast<Derived &>(*this).write_log_impl(log_queue.front());
 				log_queue.pop();
 			}
 
-			if (done)
+			if (done) {
 				break;
+			}
 		}
 	}
 };
 
-} // namespace ExGraf::UI
+} // namespace ExGraf::Messaging

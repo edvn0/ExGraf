@@ -16,8 +16,6 @@ find_package(amqpcpp REQUIRED)
 find_package(asio REQUIRED)
 find_package(libev REQUIRED)
 
-message(STATUS "ExGraf Build Type: ${CMAKE_BUILD_TYPE}")
-
 set(ExGraf_Version_Major 0)
 set(ExGraf_Version_Minor 1)
 set(ExGraf_Version_Patch 0)
@@ -72,7 +70,7 @@ add_compile_options(${COMMON_COMPILE_OPTIONS})
 set(PROJECT_VERSION
 	"${ExGraf_Version_Major}.${ExGraf_Version_Minor}.${ExGraf_Version_Patch}${ExGraf_Version_Status}"
 )
-message(STATUS "${PROJECT_NAME} version: ${PROJECT_VERSION}")
+message(STATUS "ExGraf: ${PROJECT_NAME} version: ${PROJECT_VERSION}")
 
 add_library(ExGrafHttp STATIC src/http/client.cpp)
 target_include_directories(ExGrafHttp PUBLIC include)
@@ -97,9 +95,19 @@ target_include_directories(ExGraf PUBLIC include)
 target_link_libraries(ExGraf PRIVATE ExGrafHttp Armadillo::Armadillo Boost::boost Boost::json asio::asio spdlog::spdlog Taskflow::Taskflow cppzmq amqpcpp libev::libev)
 target_precompile_headers(ExGraf PUBLIC include/exgraf/exgraf_pch.hpp)
 
+target_compile_definitions(ExGraf PUBLIC EXPORT_RABBIT_MQ_TRANSPORT)
+
 file(COPY resources DESTINATION ${CMAKE_BINARY_DIR})
 
-enable_testing()
-add_subdirectory(tests)
+# Option to build the tests
+option(BUILD_TESTS "ExGraf: Build the tests" ON)
+
+if(BUILD_TESTS)
+	message(STATUS "ExGraf: Building tests")
+	enable_testing()
+	add_subdirectory(tests)
+else()
+	message(STATUS "ExGraf: Tests are not being built")
+endif()
 
 add_subdirectory(demo)
