@@ -10,44 +10,104 @@ find_package(spdlog REQUIRED)
 find_package(cpr REQUIRED)
 find_package(Taskflow REQUIRED)
 find_package(doctest REQUIRED)
-
-message(STATUS "ExGraf Build Type: ${CMAKE_BUILD_TYPE}")
-
-set(ALLOW_TASKFLOW ON CACHE BOOL "Allow Taskflow to be used in the project")
+find_package(Boost REQUIRED)
+find_package(cppzmq REQUIRED)
+find_package(amqpcpp REQUIRED)
+find_package(asio REQUIRED)
+find_package(libev REQUIRED)
 
 set(ExGraf_Version_Major 0)
 set(ExGraf_Version_Minor 1)
 set(ExGraf_Version_Patch 0)
-if (CMAKE_BUILD_TYPE STREQUAL "Dev")
+
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
 	set(ExGraf_Version_Status "-dev")
-elseif (CMAKE_BUILD_TYPE STREQUAL "Release")
-	set(ExGraf_Version_Status "-rel")
+elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
+	set(ExGraf_Version_Status "")
 endif()
-set(PROJECT_VERSION
-  "${ExGraf_Version_Major}.${ExGraf_Version_Minor}.${ExGraf_Version_Patch}${ExGraf_Version_Status}"
+
+# Enable strict compiler warnings
+set(COMMON_COMPILE_OPTIONS
+	-Wall
+	-Wextra
+	-Wpedantic
+	-Werror
+	-Wshadow
+	-Wconversion
+	-Wsign-conversion
+	-Wnon-virtual-dtor
+	-Wold-style-cast
+	-Woverloaded-virtual
+	-Wnull-dereference
+	-Wunused
 )
-message(STATUS "${PROJECT_NAME} version: ${PROJECT_VERSION}")
+
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+	list(APPEND COMMON_COMPILE_OPTIONS
+		-Wdouble-promotion
+		-Wformat=2
+		-Wstrict-overflow=5
+		-Wundef
+		-Wcast-align
+		-Wcast-qual
+		-Wmisleading-indentation
+		-Wduplicated-cond
+		-Wduplicated-branches
+		-Wlogical-op
+		-Wuseless-cast
+	)
+elseif(CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
+	list(APPEND COMMON_COMPILE_OPTIONS
+		/W4
+		/WX
+		/permissive-
+		/sdl
+	)
+endif()
+
+add_compile_options(${COMMON_COMPILE_OPTIONS})
+
+set(PROJECT_VERSION
+	"${ExGraf_Version_Major}.${ExGraf_Version_Minor}.${ExGraf_Version_Patch}${ExGraf_Version_Status}"
+)
+message(STATUS "ExGraf: ${PROJECT_NAME} version: ${PROJECT_VERSION}")
 
 add_library(ExGrafHttp STATIC src/http/client.cpp)
 target_include_directories(ExGrafHttp PUBLIC include)
-target_link_libraries(ExGrafHttp PRIVATE cpr::cpr)
+target_link_libraries(ExGrafHttp PRIVATE cpr::cpr Taskflow::Taskflow)
 
-add_executable(
-  ExGraf
-  src/main.cpp
-  src/binary_operation.cpp
-  src/unary_operation.cpp
-  src/tensor.cpp
-  src/model.cpp
-  src/expression_graph.cpp
-)
-target_include_directories(ExGraf PUBLIC include)
-
-target_link_libraries(ExGraf PRIVATE ExGrafHttp Armadillo::Armadillo spdlog::spdlog Taskflow::Taskflow)
-
-if(${Taskflow_FOUND})
-  target_compile_definitions(ExGraf PRIVATE HAS_TASKFLOW)
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+	target_compile_options(ExGrafHttp PUBLIC -Wno-null-dereference -Wno-strict-overflow)
 endif()
 
-enable_testing()
-add_subdirectory(tests)
+add_library(
+	ExGraf
+	STATIC
+	src/explicit_instantiation.cpp
+	src/filesystem.cpp
+	src/loaders/mnist.cpp
+	src/messaging/zero_mq_transport.cpp
+	src/messaging/rabbit_mq_transport.cpp
+	src/bus/models/metrics_message.cpp
+	src/bus/models/model_configuration.cpp
+)
+target_include_directories(ExGraf PUBLIC include)
+target_link_libraries(ExGraf PRIVATE ExGrafHttp Armadillo::Armadillo Boost::boost Boost::json asio::asio spdlog::spdlog Taskflow::Taskflow cppzmq amqpcpp libev::libev)
+target_precompile_headers(ExGraf PUBLIC include/exgraf/exgraf_pch.hpp)
+
+target_compile_definitions(ExGraf PUBLIC EXPORT_RABBIT_MQ_TRANSPORT)
+
+file(COPY resources DESTINATION ${CMAKE_BINARY_DIR})
+
+# Option to build the tests
+option(BUILD_TESTS "ExGraf: Build the tests" ON)
+
+if(BUILD_TESTS)
+	message(STATUS "ExGraf: Building tests")
+	enable_testing()
+	add_subdirectory(tests)
+else()
+	message(STATUS "ExGraf: Tests are not being built")
+endif()
+
+add_subdirectory(demo)

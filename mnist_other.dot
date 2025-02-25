@@ -1,0 +1,38 @@
+digraph ExpressionGraph {
+  node [shape=box, fontname="Arial"];
+  edge [fontname="Arial"];
+  rankdir=LR;
+  node0 [label="Neg\n(0, 0)", style=filled, fillcolor=lightgreen];
+  node1 [label="SumAxis\n(0, 0)", style=filled, fillcolor=lightgreen];
+  node2 [label="SumAxis\n(0, 0)", style=filled, fillcolor=lightgreen];
+  node3 [label="Hadamard\n(0, 0)", style=filled, fillcolor=lightgreen];
+  node4 [label="Y\n(0, 0)", style=filled, fillcolor=lightgreen];
+  node4 -> node3;
+  node5 [label="Log\n(0, 0)", style=filled, fillcolor=lightgreen];
+  node6 [label="Softmax\n(0, 0)", style=filled, fillcolor=lightgreen];
+  node7 [label="ReLU\n(0, 0)", style=filled, fillcolor=lightgreen];
+  node8 [label="Add\n(0, 0)", style=filled, fillcolor=lightgreen];
+  node9 [label="Mult\n(0, 0)", style=filled, fillcolor=lightgreen];
+  node10 [label="Add\n(0, 0)", style=filled, fillcolor=lightgreen];
+  node11 [label="Mult\n(0, 0)", style=filled, fillcolor=lightgreen];
+  node12 [label="X\n(0, 0)", style=filled, fillcolor=lightgreen];
+  node12 -> node11;
+  node13 [label="Weight\n(784, 10)", style=filled, fillcolor=lightgreen];
+  node13 -> node11;
+  node11 -> node10;
+  node14 [label="Bias\n(1, 10)", style=filled, fillcolor=lightblue];
+  node14 -> node10;
+  node10 -> node9;
+  node15 [label="Weight\n(10, 10)", style=filled, fillcolor=lightgreen];
+  node15 -> node9;
+  node9 -> node8;
+  node16 [label="Bias\n(1, 10)", style=filled, fillcolor=lightblue];
+  node16 -> node8;
+  node8 -> node7;
+  node7 -> node6;
+  node6 -> node5;
+  node5 -> node3;
+  node3 -> node2;
+  node2 -> node1;
+  node1 -> node0;
+}
