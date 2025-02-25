@@ -1,13 +1,13 @@
 services:
-    #training:
-    #  build:
-    #    context: .
-    #    dockerfile: Dockerfile.cpp
-    #  container_name: exgraf_training
-    #  networks:
-    #    - exgraf_network
-    #  depends_on:
-    #    - rabbitmq
+    training:
+      build:
+        context: .
+        dockerfile: Dockerfile.cpp
+      container_name: exgraf_training
+      networks:
+        - exgraf_network
+      depends_on:
+        - rabbitmq
 
     metrics_consumer:
         build:
@@ -22,10 +22,10 @@ services:
         environment:
             ASPNETCORE_ENVIRONMENT: Development
             RabbitMQ__Host: rabbitmq
-            RabbitMQ__Username: exgraf
-            RabbitMQ__Password: <some_pass>
+            RabbitMQ__Username: ${RABBITMQ_USER}
+            RabbitMQ__Password: ${RABBITMQ_PASS}
             RabbitMQ__VirtualHost: "/"
-            ConnectionStrings__ModelPerformance: Host=postgres;Port=5432;Database=ModelPerformance;Username=exgraf;Password=<some_pass>
+            ConnectionStrings__ModelPerformance: "Host=postgres;Port=5432;Database=ModelPerformance;Username=${POSTGRES_USER};Password=${POSTGRES_PASS}"
 
     rabbitmq:
         image: rabbitmq:3-management
@@ -38,8 +38,8 @@ services:
         volumes:
             - rabbitmq_data:/var/lib/rabbitmq
         environment:
-            - RABBITMQ_DEFAULT_USER=exgraf
-            - RABBITMQ_DEFAULT_PASS=<some_pass>
+            - RABBITMQ_DEFAULT_USER=${RABBITMQ_USER}
+            - RABBITMQ_DEFAULT_PASS=${RABBITMQ_PASS}
         healthcheck:
             test: ["CMD", "rabbitmq-diagnostics", "check_port_connectivity"]
             interval: 10s
@@ -56,8 +56,8 @@ services:
         volumes:
             - postgres_data:/var/lib/postgresql/data
         environment:
-            POSTGRES_USER: exgraf
-            POSTGRES_PASSWORD: <some_pass>
+            POSTGRES_USER: ${POSTGRES_USER}
+            POSTGRES_PASSWORD: ${POSTGRES_PASS}
             POSTGRES_DB: ModelPerformance
 
 networks:

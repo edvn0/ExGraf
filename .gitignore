@@ -5,3 +5,4 @@ Testing
 compile_commands.json
 obj
 bin
+.env

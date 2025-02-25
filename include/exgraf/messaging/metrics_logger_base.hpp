@@ -2,6 +2,7 @@
 
 #include "exgraf/allowed_types.hpp"
 #include "exgraf/logger.hpp"
+#include "exgraf/messaging/serialisable.hpp"
 
 #include <condition_variable>
 #include <cstdint>
@@ -16,10 +17,8 @@
 namespace ExGraf::Messaging {
 
 template <typename T>
-concept JsonSerializable = requires(T t, std::ostream out) {
-	{ T::to_json(t) } -> std::same_as<std::string>;
-	{ T::from_json(std::string{}) } -> std::same_as<T>;
-	{ out << t };
+concept JsonSerializable = requires(const T &t) {
+	{ Serializer<T>::to_json(t) } -> std::same_as<std::string>;
 };
 
 enum class Outbox : std::uint8_t { Metrics, ModelConfiguration };
@@ -46,21 +45,13 @@ public:
 		}
 	}
 
-	template <JsonSerializable T, Outbox O> auto write_object(T &&object) {
+	template <JsonSerializable T>
+	auto write_object(const T &object, Outbox outbox) {
 		std::ostringstream ss;
-		ss << std::forward<T>(object) << "\n";
+		ss << Serializer<T>::to_json(object) << "\n";
 		{
 			std::lock_guard lock(mutex);
-			log_queue.emplace(O, ss.str());
-		}
-		cv.notify_one();
-	}
-	template <JsonSerializable T, Outbox O> auto write_object(const T &object) {
-		std::ostringstream ss;
-		ss << object << "\n";
-		{
-			std::lock_guard lock(mutex);
-			log_queue.emplace(O, ss.str());
+			log_queue.emplace(outbox, ss.str());
 		}
 		cv.notify_one();
 	}

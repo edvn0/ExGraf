@@ -1,4 +1,3 @@
-#include "exgraf/bus/models/model_configuration.hpp"
 #include <exgraf.hpp>
 
 #include <algorithm>
@@ -187,8 +186,8 @@ int main(int argc, char **argv) {
 			.optimizer = "ADAM",
 			.learning_rate = 0.001,
 	};
-	logger.write_object<Bus::Models::ModelConfiguration,
-											Messaging::Outbox::ModelConfiguration>(model);
+	logger.write_object<Bus::Models::ModelConfiguration>(
+			model, Messaging::Outbox::ModelConfiguration);
 
 	for (size_t epoch = 0; epoch < num_epochs; ++epoch) {
 		arma::Mat<size_t> confusion_matrix(10, 10, arma::fill::zeros);
@@ -203,8 +202,8 @@ int main(int argc, char **argv) {
 		auto mean_ppv = arma::mean(arma::vec(positive_predictive_values));
 		auto mean_fpr = arma::mean(arma::vec(false_positive_rates));
 		auto mean_recall = arma::mean(arma::vec(recalls));
-		logger
-				.write_object<Bus::Models::MetricsMessage, Messaging::Outbox::Metrics>({
+		logger.write_object<Bus::Models::MetricsMessage>(
+				{
 						.epoch = static_cast<std::int32_t>(epoch + 1),
 						.loss = epoch_loss,
 						.accuracy = accuracy,
@@ -212,7 +211,8 @@ int main(int argc, char **argv) {
 						.mean_fpr = mean_fpr,
 						.mean_recall = mean_recall,
 						.model_configuration = &model,
-				});
+				},
+				Messaging::Outbox::Metrics);
 		info("Epoch {}/{}: Loss={:.4f}, Accuracy={:.2f}%, PPV={:.4f}, "
 				 "FPR={:.4f}, Recall={:.4f}\n",
 				 epoch + 1, num_epochs, epoch_loss, accuracy * 100.0, mean_ppv,
