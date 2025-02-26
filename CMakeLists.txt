@@ -100,6 +100,7 @@ add_library(
 	${ExGraf_Headers}
 	src/explicit_instantiation.cpp
 	src/filesystem.cpp
+	src/logger.cpp
 	src/loaders/mnist.cpp
 	src/messaging/zero_mq_transport.cpp
 	src/messaging/rabbit_mq_transport.cpp

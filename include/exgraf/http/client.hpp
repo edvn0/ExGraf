@@ -5,6 +5,7 @@
 #include <ranges>
 #include <span>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace ExGraf::Http {

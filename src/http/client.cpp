@@ -1,10 +1,14 @@
 #include "exgraf/http/client.hpp"
 #include "exgraf/http/response.hpp"
 
+#include <vector>
+
 #include <cpr/cpr.h>
 
+#ifndef WIN32
 #include <taskflow/core/executor.hpp>
 #include <taskflow/taskflow.hpp>
+#endif
 
 namespace ExGraf::Http {
 
@@ -108,6 +112,7 @@ auto HttpClient::del(const std::string &endpoint) const -> HttpResponse {
 
 auto MultithreadedDownloadClient::download_span(
 		std::span<const std::string_view> urls) const -> std::vector<HttpResponse> {
+#ifndef WIN32
 	static tf::Executor executor;
 	tf::Taskflow taskflow;
 	std::vector<HttpResponse> responses(urls.size());
@@ -118,6 +123,10 @@ auto MultithreadedDownloadClient::download_span(
 	}
 	executor.run(taskflow).get();
 	return responses;
+#else
+	(void)urls;
+	return std::vector<HttpResponse>{};
+#endif
 }
 
 } // namespace ExGraf::Http

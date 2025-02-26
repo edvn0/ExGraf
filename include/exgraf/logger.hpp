@@ -10,6 +10,8 @@
 
 namespace ExGraf {
 
+auto get_from_environment(std::string_view) -> std::string;
+
 class Logger {
 public:
 	static auto instance() -> auto & {
@@ -19,7 +21,8 @@ public:
 			spdlog::register_logger(log);
 			log->set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%^%l%$] [thread %t] %v");
 			log->set_level(spdlog::level::debug);
-			if (const auto *log_level = std::getenv("LOG_LEVEL")) {
+			if (const auto log_level = get_from_environment("LOG_LEVEL");
+					log_level.empty()) {
 				log->set_level(spdlog::level::from_str(log_level));
 			}
 
@@ -34,7 +37,8 @@ public:
 					"graphviz.dot", false);
 			auto log = std::make_shared<spdlog::logger>("graphviz_logger", file_sink);
 			spdlog::register_logger(log);
-			if (const auto *log_level = std::getenv("LOG_LEVEL")) {
+			if (const auto log_level = get_from_environment("LOG_LEVEL");
+					log_level.empty()) {
 				log->set_level(spdlog::level::from_str(log_level));
 			} else {
 				log->set_level(spdlog::level::debug);
