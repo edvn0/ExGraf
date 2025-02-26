@@ -182,9 +182,34 @@ public:
 	auto name() const -> std::string_view override { return "Add"; }
 };
 
+template <AllowedTypes T> class Tanh : public Node<T> {
+public:
+	explicit Tanh(Node<T> *input) : Node<T>(NodeType::Tanh, {input}) {}
+
+	auto accept(NodeVisitor<T> &visitor) -> void override {
+		visitor.visit(*this);
+	}
+
+	auto forward() -> arma::Mat<T> override {
+		auto x = this->inputs[0]->forward();
+		trace("Tanh::forward - Input shape: ({}, {})", x.n_rows, x.n_cols);
+		arma::Mat<T> result = arma::tanh(x);
+		this->value = std::move(result);
+		return *this->value;
+	}
+
+	auto backward(const arma::Mat<T> &grad) -> void override {
+		auto x = this->inputs[0]->forward();
+		arma::Mat<T> dx = grad % (1 - arma::square(arma::tanh(x)));
+		this->inputs[0]->backward(dx);
+	}
+
+	auto name() const -> std::string_view override { return "Tanh"; }
+};
+
 template <AllowedTypes T> class ReLU : public Node<T> {
 	T clamp{std::numeric_limits<T>::infinity()};
-	T lower{static_cast<T>(0.05)}; // Leaky ReLU slope
+	T lower{static_cast<T>(0.05)};
 
 public:
 	explicit ReLU(Node<T> *input, T c = std::numeric_limits<T>::infinity())

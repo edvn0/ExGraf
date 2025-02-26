@@ -21,7 +21,7 @@ static constexpr auto to_error_code(cpr::ErrorCode value) -> ErrorCode {
 	}
 }
 
-static constexpr auto create_error_maybe(cpr::Error error)
+static constexpr auto create_error_maybe(const cpr::Error &error)
 		-> std::optional<HttpError> {
 	if (error.code == cpr::ErrorCode::OK)
 		return std::nullopt;

@@ -16,6 +16,7 @@ namespace ExGraf {
 	X(Add<T>)                                                                    \
 	X(Mult<T>)                                                                   \
 	X(ReLU<T>)                                                                   \
+	X(Tanh<T>)                                                                   \
 	X(Softmax<T>)                                                                \
 	X(CrossEntropyLoss<T>)                                                       \
 	X(SumAxis<T>)                                                                \

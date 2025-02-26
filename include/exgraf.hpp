@@ -3,6 +3,8 @@
 #include "exgraf/allowed_types.hpp"
 #include "exgraf/logger.hpp"
 
+#include "exgraf/sequential.hpp"
+
 #include "exgraf/expression_graph.hpp"
 #include "exgraf/loaders/mnist.hpp"
 #include "exgraf/node.hpp"

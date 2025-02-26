@@ -10,6 +10,7 @@ template <AllowedTypes T> class Variable;
 template <AllowedTypes T> class Add;
 template <AllowedTypes T> class Mult;
 template <AllowedTypes T> class ReLU;
+template <AllowedTypes T> class Tanh;
 template <AllowedTypes T> class Softmax;
 template <AllowedTypes T> class CrossEntropyLoss;
 template <AllowedTypes T> class SumAxis;

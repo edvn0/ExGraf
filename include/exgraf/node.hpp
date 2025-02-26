@@ -23,6 +23,7 @@ enum class NodeType : std::uint8_t {
 	Softmax,
 	CrossEntropyLoss,
 	ReLU,
+	Tanh,
 	Sum,
 	Negate,
 	Log,

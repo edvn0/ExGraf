@@ -153,6 +153,15 @@ int main(int argc, char **argv) {
 			{.input_size = {ExpressionGraph<T>::ModelConfig::unused, 784}}, 0.001,
 			0.9, 0.99);
 
+	Sequential<T> seq;
+	seq.add_layer(64, ActivationFunction::ReLU, "hidden1");
+	seq.add_layer(32, ActivationFunction::ReLU, "hidden2");
+	seq.add_layer(5, ActivationFunction::Tanh, "hidden2");
+	seq.compile<SGDOptimizer<T>>();
+
+	arma::Mat<T> input_data(1, 64, arma::fill::randn);
+	auto output = seq.predict(input_data);
+
 	auto &&[images, labels] =
 			MNIST::load("https://raw.githubusercontent.com/fgnt/mnist/master/"
 									"train-images-idx3-ubyte.gz",
