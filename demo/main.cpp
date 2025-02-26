@@ -1,3 +1,4 @@
+#include "exgraf/model_configuration.hpp"
 #include <exgraf.hpp>
 
 #include <algorithm>
@@ -50,7 +51,8 @@ auto read_program_options(const std::int32_t argc, char **argv)
 }
 
 template <AllowedTypes T>
-auto batch_predict(ExpressionGraph<T> &graph, const arma::Mat<double> &images,
+auto batch_predict(TrainablePredictor<T> auto &graph,
+									 const arma::Mat<double> &images,
 									 const arma::Mat<double> &labels, std::size_t num_samples,
 									 std::size_t batch_size,
 									 const std::vector<std::size_t> &indices,
@@ -203,8 +205,8 @@ int main(int argc, char **argv) {
 		arma::Mat<size_t> confusion_matrix(10, 10, arma::fill::zeros);
 		std::ranges::shuffle(indices, g);
 		auto &&[epoch_loss, correct_predictions] =
-				batch_predict(graph, images, labels, num_samples, batch_size, indices,
-											confusion_matrix);
+				batch_predict<T>(graph, images, labels, num_samples, batch_size,
+												 indices, confusion_matrix);
 		T accuracy =
 				static_cast<T>(correct_predictions) / static_cast<T>(num_samples);
 		auto &&[positive_predictive_values, false_positive_rates, recalls] =

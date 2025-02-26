@@ -54,8 +54,8 @@ public:
 
 		for (size_t i = 0; i < layers.size(); ++i) {
 			const auto &layer = layers[i];
-			auto layer_output =
-					add_dense_layer(current_layer, current_size, layer.size);
+			auto layer_output = add_dense_layer(current_layer, current_size,
+																					layer.size, layer.activation);
 			auto *activation = create_activation(layer_output, layer.activation);
 			current_layer = activation;
 			current_size = layer.size;
@@ -119,9 +119,9 @@ private:
 	}
 
 	N *add_dense_layer(N *input_node, std::uint32_t input_nodes,
-										 std::uint32_t output_nodes) {
-		auto B = add_variable(randn_matrix<T>(output_nodes, 1));
-		auto W = add_variable(randn_matrix<T>(output_nodes, input_nodes));
+										 std::uint32_t output_nodes, ActivationFunction f) {
+		auto B = add_variable(initialize_weights<T>(output_nodes, 1, f));
+		auto W = add_variable(initialize_weights<T>(output_nodes, input_nodes, f));
 		auto XW = add_node<Mult<T>>(input_node, W);
 		auto XW_plus_B = add_node<Add<T>>(XW, B);
 		return XW_plus_B;

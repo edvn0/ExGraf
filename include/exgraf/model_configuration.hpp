@@ -101,12 +101,27 @@ template <AllowedTypes T>
 arma::Mat<T> initialize_weights(std::uint32_t input_size,
 																std::uint32_t output_size,
 																ActivationFunction activation) {
+	static constexpr auto t_sqrt = [](auto x) -> T {
+		return static_cast<T>(std::sqrt(x));
+	};
+
 	if (activation == ActivationFunction::ReLU) {
-		return randn_matrix<T>(input_size, output_size) *
-					 std::sqrt(2.0 / input_size);
+		return randn_matrix<T>(input_size, output_size) * t_sqrt(2.0 / input_size);
 	} else {
 		return randn_matrix<T>(input_size, output_size) *
-					 std::sqrt(2.0 / (input_size + output_size));
+					 t_sqrt(2.0 / (input_size + output_size));
 	}
 }
+
+template <typename GraphLike, typename FloatType>
+concept TrainablePredictor = AllowedTypes<FloatType> &&
+														 requires(GraphLike u, arma::Mat<FloatType> input) {
+															 {
+																 u.predict(input)
+															 } -> std::same_as<arma::Mat<FloatType>>;
+															 {
+																 u.train(input)
+															 } -> std::same_as<arma::Mat<FloatType>>;
+														 };
+
 } // namespace ExGraf
