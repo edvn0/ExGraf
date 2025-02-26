@@ -1,22 +1,33 @@
 services:
     training:
-      build:
-        context: .
-        dockerfile: Dockerfile.cpp
-      container_name: exgraf_training
-      networks:
-        - exgraf_network
-      depends_on:
-        - rabbitmq
-      environment:
-        RABBITMQ_USER: ${RABBITMQ_USER}
-        RABBITMQ_PASS: ${RABBITMQ_PASS}
-      command: ["/app/trainer", "--user", "${RABBITMQ_USER}", "--password", "${RABBITMQ_PASS}", "--host", "rabbitmq", "--port", "5672"]
+        build:
+            context: .
+            dockerfile: ExGraf/Dockerfile.cpp
+        container_name: exgraf_training
+        networks:
+            - exgraf_network
+        depends_on:
+            - rabbitmq
+        environment:
+            RABBITMQ_USER: ${RABBITMQ_USER}
+            RABBITMQ_PASS: ${RABBITMQ_PASS}
+        command:
+            [
+                "/app/trainer",
+                "--user",
+                "${RABBITMQ_USER}",
+                "--password",
+                "${RABBITMQ_PASS}",
+                "--host",
+                "rabbitmq",
+                "--port",
+                "5672",
+            ]
 
     metrics_consumer:
         build:
             context: .
-            dockerfile: Dockerfile.dotnet
+            dockerfile: MetricsSubscriber/Dockerfile.dotnet
         container_name: exgraf_metrics_consumer
         networks:
             - exgraf_network
