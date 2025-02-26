@@ -200,7 +200,24 @@ public:
 
 	auto backward(const arma::Mat<T> &grad) -> void override {
 		auto x = this->inputs[0]->forward();
-		arma::Mat<T> dx = grad % (1 - arma::square(arma::tanh(x)));
+		arma::Mat<T> dx = (1 - arma::square(arma::tanh(x)));
+
+		// Broadcasting logic
+		if (grad.n_rows == 1 && grad.n_cols == 1) {
+			dx *= grad(0, 0); // Scalar case
+		} else if (grad.n_cols == 1 && grad.n_rows == dx.n_rows) {
+			dx.each_col() %= grad; // Column vector case
+		} else if (grad.n_rows == 1 && grad.n_cols == dx.n_cols) {
+			dx.each_row() %= grad; // Row vector case
+		} else if (grad.n_rows == dx.n_rows && grad.n_cols == dx.n_cols) {
+			dx %= grad; // Standard element-wise multiplication
+		} else {
+			throw std::runtime_error(
+					fmt::format("Tanh::backward - Mismatched gradient shape ({}, {}) for "
+											"input ({}, {})",
+											grad.n_rows, grad.n_cols, dx.n_rows, dx.n_cols));
+		}
+
 		this->inputs[0]->backward(dx);
 	}
 

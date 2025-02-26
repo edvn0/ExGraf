@@ -61,9 +61,18 @@ public:
 			current_size = layer.size;
 		}
 		output = current_layer;
+
+		auto y = add_placeholder("Y");
+		auto neg = add_node<Neg<T>>(y);
+		auto diff = add_node<Add<T>>(output, neg);
+		auto squared_diff = add_node<Hadamard<T>>(diff, diff);
+		auto sum_squared = add_node<SumAxis<T>>(squared_diff, 0);
+		// auto mean_loss =
+		//		add_node<Div<T>>(sum_squared, static_cast<T>(layers.back().size));
+		loss = sum_squared;
 	}
 
-	Mat predict(const Mat &input_matrix) {
+	auto predict(const Mat &input_matrix) {
 		if (input_matrix.n_cols != layers.front().size) {
 			throw InvalidInputShapeError(
 					"Input shape does not match model input size");
@@ -72,12 +81,14 @@ public:
 		return output->forward();
 	}
 
-	void train(const Mat &labels) {
+	auto train(const Mat &labels) {
 		get_placeholder("Y")->set_value(labels);
+		auto l = loss->forward();
 		Mat grad(1, 1, arma::fill::ones);
 		(void)output->backward(grad);
 		optimizer->step(std::span(trainable_nodes));
 		traverse([](Node<T> &node) { node.zero_gradient(); });
+		return l;
 	}
 
 	template <typename F> void traverse(F &&f) {
@@ -111,6 +122,7 @@ private:
 	std::unique_ptr<Optimizer<T>> optimizer;
 	Ph *input;
 	N *output;
+	N *loss;
 
 	Ph *add_placeholder(const std::string &id) {
 		auto *placeholder = add_node<Placeholder<T>>(id);

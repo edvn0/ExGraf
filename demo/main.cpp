@@ -1,4 +1,5 @@
 #include "exgraf/model_configuration.hpp"
+#include "exgraf/optimizers/adam_optimizer.hpp"
 #include <exgraf.hpp>
 
 #include <algorithm>
@@ -155,14 +156,46 @@ int main(int argc, char **argv) {
 			{.input_size = {ExpressionGraph<T>::ModelConfig::unused, 784}}, 0.001,
 			0.9, 0.99);
 
-	Sequential<T> seq;
-	seq.add_layer(64, ActivationFunction::ReLU, "hidden1");
-	seq.add_layer(32, ActivationFunction::ReLU, "hidden2");
-	seq.add_layer(5, ActivationFunction::Tanh, "hidden2");
-	seq.compile<SGDOptimizer<T>>();
+	// Generate a LARGE XOR dataset
+	auto single_batch_x = arma::Mat<T>{
+			{0, 0},
+			{0, 1},
+			{1, 0},
+			{1, 1},
+	};
+	auto single_batch_y = arma::Mat<T>{
+			{0, 1},
+			{1, 0},
+			{1, 0},
+			{0, 1},
+	};
 
-	arma::Mat<T> input_data(1, 64, arma::fill::randn);
-	auto output = seq.predict(input_data);
+	// Repeat the dataset 1000 times
+	auto X = arma::Mat<T>(single_batch_x.n_rows * 1000, single_batch_x.n_cols);
+	auto y = arma::Mat<T>(single_batch_y.n_rows * 1000, single_batch_y.n_cols);
+	for (std::size_t i = 0; i < 1000; ++i) {
+		X.rows(i * 4, (i + 1) * 4 - 1) = single_batch_x;
+		y.rows(i * 4, (i + 1) * 4 - 1) = single_batch_y;
+	}
+
+	Sequential<T> xor_model;
+	xor_model.add_layer(2, ActivationFunction::Tanh, "input");
+	xor_model.add_layer(2, ActivationFunction::ReLU, "hidden1");
+	xor_model.add_layer(2, ActivationFunction::Tanh, "output");
+	xor_model.compile<ADAMOptimizer<T>>(0.0001);
+
+	auto xor_indices = std::vector<std::size_t>{0, 1, 2, 3};
+	auto xor_confusion_matrix = arma::Mat<std::size_t>(2, 2, arma::fill::zeros);
+
+	for (std::size_t epoch = 0; epoch < 1000; ++epoch) {
+		auto [epoch_loss, correct_predictions] = batch_predict<T>(
+				xor_model, X, y, 4, 4, xor_indices, xor_confusion_matrix);
+
+		if (epoch % 100 == 0) {
+			fmt::print("Epoch {}: Loss = {:.6f}, Correct = {}\n", epoch, epoch_loss,
+								 correct_predictions);
+		}
+	}
 
 	auto &&[images, labels] =
 			MNIST::load("https://raw.githubusercontent.com/fgnt/mnist/master/"
