@@ -6,3 +6,6 @@ compile_commands.json
 obj
 bin
 .env
+.vscode/settings.json
+.vscode/tasks.json
+.vscode/launch.json

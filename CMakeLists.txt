@@ -26,21 +26,7 @@ elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
 	set(ExGraf_Version_Status "")
 endif()
 
-# Enable strict compiler warnings
-set(COMMON_COMPILE_OPTIONS
-	-Wall
-	-Wextra
-	-Wpedantic
-	-Werror
-	-Wshadow
-	-Wconversion
-	-Wsign-conversion
-	-Wnon-virtual-dtor
-	-Wold-style-cast
-	-Woverloaded-virtual
-	-Wnull-dereference
-	-Wunused
-)
+set(COMMON_COMPILE_OPTIONS "")
 
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU")
 	list(APPEND COMMON_COMPILE_OPTIONS
@@ -55,7 +41,33 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU")
 		-Wduplicated-branches
 		-Wlogical-op
 		-Wuseless-cast
+		-Wall
+		-Wextra
+		-Wpedantic
+		-Werror
+		-Wshadow
+		-Wconversion
+		-Wsign-conversion
+		-Wnon-virtual-dtor
+		-Wold-style-cast
+		-Woverloaded-virtual
+		-Wnull-dereference
+		-Wunused
 	)
+elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+	list(APPEND COMMON_COMPILE_OPTIONS
+		-Wall
+		-Wextra
+		-Wpedantic
+		-Werror
+		-Wshadow
+		-Wconversion
+		-Wsign-conversion
+		-Wnon-virtual-dtor
+		-Wold-style-cast
+		-Woverloaded-virtual
+		-Wnull-dereference
+		-Wunused)
 elseif(CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
 	list(APPEND COMMON_COMPILE_OPTIONS
 		/W4
@@ -80,9 +92,12 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
 	target_compile_options(ExGrafHttp PUBLIC -Wno-null-dereference -Wno-strict-overflow)
 endif()
 
+file(GLOB_RECURSE ExGraf_Headers include/*.hpp)
+
 add_library(
 	ExGraf
 	STATIC
+	${ExGraf_Headers}
 	src/explicit_instantiation.cpp
 	src/filesystem.cpp
 	src/loaders/mnist.cpp
