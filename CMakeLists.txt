@@ -24,3 +24,4 @@ message(STATUS "ExGraf: ${PROJECT_NAME} version: ${PROJECT_VERSION}")
 
 add_subdirectory(ExGraf)
 add_subdirectory(demo)
+add_subdirectory(cuda)

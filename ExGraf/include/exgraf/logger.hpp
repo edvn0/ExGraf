@@ -90,3 +90,12 @@ inline auto log_graphviz(const std::string &graphviz_content) -> void {
 }
 
 } // namespace ExGraf
+
+#ifdef EXGRAF_LEAK_NAMESPACE
+using ExGraf::debug;
+using ExGraf::error;
+using ExGraf::info;
+using ExGraf::log_graphviz;
+using ExGraf::trace;
+using ExGraf::warn;
+#endif
