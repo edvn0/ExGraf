@@ -14,6 +14,7 @@ public:
 	auto create_stream() const -> CUstream;
 	auto destroy_stream(CUstream &stream) -> void;
 	auto get_device() const -> CUdevice;
+	auto get_device_properties() const -> const cudaDeviceProp &;
 	auto print_info() const -> void;
 
 private:

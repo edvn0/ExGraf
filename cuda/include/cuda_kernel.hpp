@@ -8,6 +8,10 @@
 
 namespace cuda {
 
+struct KernelNotFound : public std::runtime_error {
+	using std::runtime_error::runtime_error;
+};
+
 template <typename T>
 concept HasXYZ = requires(T t) {
 	t.x;
@@ -19,10 +23,8 @@ class Kernel {
 public:
 	MakeNonCopyNonMove(Kernel);
 
-	explicit Kernel(Context &ctx, const std::filesystem::path &path);
+	explicit Kernel(Context &, const std::filesystem::path &);
 	~Kernel();
-
-	auto get_function(const char *kernel_name) -> CUfunction;
 
 	struct Metrics {
 		float time_taken{};
@@ -46,7 +48,7 @@ public:
 		};
 		auto func = get_function(name.c_str());
 		if (!func) {
-			throw std::runtime_error("Could not find kernel with requested name.");
+			throw KernelNotFound("Could not find kernel with requested name.");
 		}
 
 		return run_kernel(func, dims, blocks, arguments);
@@ -60,6 +62,7 @@ private:
 	auto runtime_compile(const std::filesystem::path &path) -> void;
 	auto run_kernel(CUfunction, const arma::uvec3 &, const arma::uvec3 &,
 									const std::span<void *> args) -> Metrics;
+	auto get_function(const char *kernel_name) -> CUfunction;
 };
 
 } // namespace cuda

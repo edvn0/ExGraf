@@ -30,6 +30,10 @@ auto Context::destroy_stream(CUstream &stream) -> void {
 
 auto Context::get_device() const -> CUdevice { return device; }
 
+auto Context::get_device_properties() const -> const cudaDeviceProp & {
+	return prop;
+}
+
 auto Context::print_info() const -> void {
 	info("Device name: {}", prop.name);
 	info("CUDA Capability: {}.{}", prop.major, prop.minor);

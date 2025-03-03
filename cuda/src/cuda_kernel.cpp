@@ -1,6 +1,35 @@
 #include "cuda_kernel.hpp"
+#include <string_view>
 
 namespace cuda {
+
+static constexpr auto x = [](const auto &a) { return a.at(0); };
+static constexpr auto y = [](const auto &a) { return a.at(1); };
+static constexpr auto z = [](const auto &a) { return a.at(2); };
+
+auto construct_nvrtc_args(Context *ctx) -> std::vector<std::string> {
+	auto device_props = ctx->get_device_properties();
+
+	int major = device_props.major;
+	int minor = device_props.minor;
+
+	std::string gpu_arch =
+			fmt::format("--gpu-architecture=compute_{}{}", major, minor);
+
+	static std::vector<std::string> options_strings = {
+			gpu_arch,
+			"--std=c++14",
+			"--device-debug", // Include debug info for RelWithDebInfo-like setup
+			"--generate-line-info", // Enable source line mapping
+			"--use_fast_math", // Enable fast approximations for common math functions
+			"--ftz=true",			 // Flush denormals to zero
+			"--prec-div=false",	 // Optimize division
+			"--prec-sqrt=false", // Optimize square root
+			"--fmad=true"				 // Enable fused multiply-add
+	};
+
+	return options_strings;
+}
 
 Kernel::~Kernel() { cuModuleUnload(cuda_module); }
 
@@ -44,8 +73,11 @@ auto Kernel::runtime_compile(const std::filesystem::path &path) -> void {
 		throw std::runtime_error("Failed to create NVRTC program.");
 	}
 
-	std::array<const char *, 2> options = {"--gpu-architecture=compute_75",
-																				 "--std=c++14"};
+	auto args = construct_nvrtc_args(context);
+	std::vector<const char *> options;
+	std::transform(args.begin(), args.end(), std::back_inserter(options),
+								 [](const auto &arg) { return arg.c_str(); });
+
 	nvrtcResult compile_result;
 	if (compile_result =
 					nvrtcCompileProgram(prog, options.size(), options.data());
@@ -93,15 +125,12 @@ auto Kernel::run_kernel(CUfunction func, const arma::uvec3 &grid_dim,
 												const arma::uvec3 &block_dim,
 												const std::span<void *> args) -> Metrics {
 	// Start time event
-	CUevent start, stop;
+	CUevent start;
+	CUevent stop;
 	auto stream = context->create_stream();
 	CUDA_DRIVER_CHECK(cuEventCreate(&start, 0));
 	CUDA_DRIVER_CHECK(cuEventCreate(&stop, 0));
 	CUDA_DRIVER_CHECK(cuEventRecord(start, stream));
-
-	static constexpr auto x = [](const auto &a) { return a.at(0); };
-	static constexpr auto y = [](const auto &a) { return a.at(1); };
-	static constexpr auto z = [](const auto &a) { return a.at(2); };
 
 	CUDA_DRIVER_CHECK(cuLaunchKernel(func, x(grid_dim), y(grid_dim), z(grid_dim),
 																	 x(block_dim), y(block_dim), z(block_dim), 0,
@@ -112,7 +141,7 @@ auto Kernel::run_kernel(CUfunction func, const arma::uvec3 &grid_dim,
 	CUDA_DRIVER_CHECK(cuEventSynchronize(stop));
 
 	Metrics time{};
-	CUDA_DRIVER_CHECK(cuEventElapsedTime_v2(&time.time_taken, start, stop));
+	CUDA_DRIVER_CHECK(cuEventElapsedTime(&time.time_taken, start, stop));
 
 	context->destroy_stream(stream);
 

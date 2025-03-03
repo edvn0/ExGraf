@@ -14,8 +14,7 @@ auto parse_options(int argc, char **argv)
 	using namespace boost::program_options;
 	options_description desc{"Options"};
 	desc.add_options()("help,h", "Help screen")(
-			"kernel,k",
-			value<std::string>()->default_value("kernels/cuda::_kernel.cu"),
+			"kernel,k", value<std::string>()->default_value("kernels/cuda_kernel.cu"),
 			"Path to the cuda:: kernel file.");
 
 	variables_map vm;
@@ -64,7 +63,7 @@ auto main(int argc, char **argv) -> int {
 	auto &&[time_taken] = kernel.launch_kernel("add", grid, block, args);
 	info("Time taken: {}", time_taken);
 
-	static constexpr auto size_matmul = 5000U;
+	static constexpr auto size_matmul = 900U;
 
 	cuda::MatrixMemory<float> output_matmul_memory{
 			ctx,
