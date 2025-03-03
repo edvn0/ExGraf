@@ -1,228 +1,22 @@
-#include <algorithm>
 #include <armadillo>
-#include <bit>
 #include <boost/program_options.hpp>
-#include <cstddef>
-#include <cuda.h>
-#include <cuda_runtime.h>
 #include <filesystem>
-#include <iostream>
-#include <nvrtc.h>
-#include <optional>
-#include <sstream>
-#include <stdexcept>
-#include <utility>
-#include <vector>
+
+#include "cuda_context.hpp"
+#include "cuda_kernel.hpp"
+#include "cuda_memory.hpp"
 
 #define EXGRAF_LEAK_NAMESPACE
 #include "exgraf/logger.hpp"
 
-static constexpr auto to_string = [](CUresult result) {
-	return std::to_underlying(result);
-};
-
-#define CUDA_CHECK(call)                                                       \
-	do {                                                                         \
-		if (auto result = call; result != CUDA_SUCCESS) {                          \
-			info("CUDA error: {}", to_string(result));                               \
-			throw std::runtime_error(                                                \
-					fmt::format("CUDA error: {}", to_string(result)));                   \
-		}                                                                          \
-	} while (0)
-
-#define MakeNonCopyNonMove(Class)                                              \
-	Class(const Class &) = delete;                                               \
-	Class &operator=(const Class &) = delete;                                    \
-	Class(Class &&) = delete;                                                    \
-	Class &operator=(Class &&) = delete
-
-class CudaContext;
-
-class CudaMemory {
-public:
-	MakeNonCopyNonMove(CudaMemory);
-
-	explicit CudaMemory(CudaContext &, std::size_t s) : size(s) {
-		if (size == 0) {
-			throw std::invalid_argument("Size must be greater than zero.");
-		}
-		CUDA_CHECK(cuMemAlloc(&device_ptr, size));
-	}
-
-	~CudaMemory() {
-		if (device_ptr) {
-			cuMemFree(device_ptr);
-		}
-	}
-
-	auto get_size() const -> std::size_t { return size; }
-
-	template <typename T>
-	void copy_to_device(const std::span<const T> host_data,
-											std::size_t offset = 0) {
-		if (offset + host_data.size_bytes() > size) {
-			throw std::out_of_range("Memory write out of bounds.");
-		}
-		CUDA_CHECK(cuMemcpyHtoD(device_ptr + offset, host_data.data(),
-														host_data.size_bytes()));
-	}
-	template <typename T>
-	void copy_to_device(const std::span<T> host_data, std::size_t offset = 0) {
-		if (offset + host_data.size_bytes() > size) {
-			throw std::out_of_range("Memory write out of bounds.");
-		}
-		CUDA_CHECK(cuMemcpyHtoD(device_ptr + offset, host_data.data(),
-														host_data.size_bytes()));
-	}
-
-	template <typename T>
-	void copy_to_host(std::span<T> host_data, std::size_t offset = 0) const {
-		if (offset + host_data.size_bytes() > size) {
-			throw std::out_of_range("Memory read out of bounds.");
-		}
-		CUDA_CHECK(cuMemcpyDtoH(host_data.data(), device_ptr + offset,
-														host_data.size_bytes()));
-	}
-
-	auto get_device_ptr() const -> const CUdeviceptr & { return device_ptr; }
-
-private:
-	CUdeviceptr device_ptr{0};
-	std::size_t size{0};
-};
-
-class CudaContext {
-public:
-	MakeNonCopyNonMove(CudaContext);
-
-	explicit CudaContext() {
-		CUDA_CHECK(cuInit(0));
-		CUDA_CHECK(cuDeviceGet(&device, 0));
-		CUDA_CHECK(cuCtxCreate(&context, 0, device));
-	}
-
-	~CudaContext() { cuCtxDestroy(context); }
-
-	auto get_context() const -> CUcontext { return context; }
-
-	auto get_device() const -> CUdevice { return device; }
-
-private:
-	CUcontext context;
-	CUdevice device;
-};
-
-class CudaKernel {
-
-public:
-	MakeNonCopyNonMove(CudaKernel);
-
-	explicit CudaKernel(CudaContext &ctx, const std::filesystem::path &path)
-			: context(&ctx) {
-		if (!std::filesystem::exists(path)) {
-			throw std::invalid_argument(
-					fmt::format("Kernel file does not exist: {}", path.string()));
-		}
-
-		runtime_compile(path);
-	}
-
-	auto get_function(const char *kernel_name) -> CUfunction {
-		CUfunction func;
-		cuModuleGetFunction(&func, cuda_module, kernel_name);
-		return func;
-	}
-
-	~CudaKernel() { cuModuleUnload(cuda_module); }
-
-private:
-	std::vector<char> ptx_code;
-	CudaContext *context;
-	CUmodule cuda_module;
-
-	auto runtime_compile(const std::filesystem::path &path) -> void {
-		if (!std::filesystem::exists(path)) {
-			throw std::invalid_argument("Kernel file does not exist.");
-		}
-
-		{
-			std::ifstream code{path, std::ios::ate};
-			if (!code) {
-				throw std::runtime_error("Failed to open kernel file.");
-			}
-
-			std::size_t size = code.tellg();
-			code.seekg(0, std::ios::beg);
-			ptx_code.resize(size);
-			code.read(ptx_code.data(), size);
-		}
-
-		nvrtcProgram prog;
-		if (auto result = nvrtcCreateProgram(&prog, ptx_code.data(), path.c_str(),
-																				 0, nullptr, nullptr);
-				result != NVRTC_SUCCESS) {
-			throw std::runtime_error("Failed to create NVRTC program.");
-		}
-
-		std::array<const char *, 2> options = {"--gpu-architecture=compute_75",
-																					 "--std=c++14"};
-		nvrtcResult compile_result;
-		if (compile_result =
-						nvrtcCompileProgram(prog, options.size(), options.data());
-				compile_result != NVRTC_SUCCESS) {
-			info("Failed to compile NVRTC program.");
-		}
-
-		std::size_t log_size = 0;
-		if (auto result = nvrtcGetProgramLogSize(prog, &log_size);
-				result != NVRTC_SUCCESS) {
-			throw std::runtime_error("Failed to get NVRTC program log size.");
-		}
-
-		std::vector<char> log(log_size);
-		if (auto result = nvrtcGetProgramLog(prog, log.data());
-				result != NVRTC_SUCCESS) {
-			throw std::runtime_error("Failed to get NVRTC program log.");
-		}
-
-		if (compile_result != NVRTC_SUCCESS) {
-			// Log the compilation error.
-			info("Compilation error: {}", log.data());
-			throw std::runtime_error("Failed to compile NVRTC program.");
-		}
-
-		// Extract PTX
-		std::size_t ptx_size = 0;
-		if (auto result = nvrtcGetPTXSize(prog, &ptx_size);
-				result != NVRTC_SUCCESS) {
-			throw std::runtime_error("Failed to get NVRTC PTX size.");
-		}
-
-		ptx_code.resize(ptx_size);
-		if (auto result = nvrtcGetPTX(prog, ptx_code.data());
-				result != NVRTC_SUCCESS) {
-			throw std::runtime_error("Failed to get NVRTC PTX.");
-		}
-
-		// Load into module
-		if (auto result =
-						cuModuleLoadDataEx(&cuda_module, ptx_code.data(), 0, 0, 0);
-				result != CUDA_SUCCESS) {
-			throw std::runtime_error("Failed to load CUDA module.");
-		}
-
-		nvrtcDestroyProgram(&prog);
-	}
-};
-
-// boost program options to locate the kernel file:
 auto parse_options(int argc, char **argv)
 		-> std::optional<std::filesystem::path> {
 	using namespace boost::program_options;
 	options_description desc{"Options"};
 	desc.add_options()("help,h", "Help screen")(
-			"kernel,k", value<std::string>()->default_value("kernels/cuda_kernel.cu"),
-			"Path to the CUDA kernel file.");
+			"kernel,k",
+			value<std::string>()->default_value("kernels/cuda::_kernel.cu"),
+			"Path to the cuda:: kernel file.");
 
 	variables_map vm;
 	store(parse_command_line(argc, argv, desc), vm);
@@ -237,80 +31,106 @@ auto parse_options(int argc, char **argv)
 
 	return std::filesystem::path{vm["kernel"].as<std::string>()};
 }
+
 auto main(int argc, char **argv) -> int {
 	auto kernel_path = parse_options(argc, argv);
 	if (!kernel_path) {
 		return 0;
 	}
 
-	try {
-		CudaContext ctx;
-		info("Created CUDA context.");
+	cuda::Context ctx;
+	ctx.print_info();
 
-		// Read some info about the GPU device.
-		cudaDeviceProp prop;
-		cudaGetDeviceProperties(&prop, 0);
-		info("Device name: {}", prop.name);
+	cuda::Kernel kernel(ctx, *kernel_path);
+	cuda::MatrixMemory<float> host_a(ctx, 10, 10, arma::fill::randu);
+	cuda::MatrixMemory<float> host_b(ctx, 10, 10, arma::fill::randu);
+	cuda::MatrixMemory<float> host_c(ctx, 10, 10, arma::fill::zeros);
 
-		CudaKernel kernel(ctx, *kernel_path);
-		auto func = kernel.get_function("add");
+	auto a_ptr = host_a.get_device_ptr();
+	auto b_ptr = host_b.get_device_ptr();
+	auto result_data_ptr = host_c.get_device_ptr();
+	constexpr int N = 10;
+	int size = N * N;
+	std::array<void *, 4> args = {
+			&a_ptr,
+			&b_ptr,
+			&result_data_ptr,
+			&size,
+	};
 
-		// We now have the offsets, we can pass them to the kernel.
-		CudaMemory a(ctx, 100 * sizeof(float));
-		CudaMemory b(ctx, 100 * sizeof(float));
-		CudaMemory c(ctx, 100 * sizeof(float));
+	dim3 block(N, N);
+	dim3 grid(1, 1);
 
-		arma::Mat<float> host_a(10, 10, arma::fill::randu);
-		arma::Mat<float> host_b(10, 10, arma::fill::randu);
-		arma::Mat<float> host_c(10, 10, arma::fill::zeros);
+	auto &&[time_taken] = kernel.launch_kernel("add", grid, block, args);
+	info("Time taken: {}", time_taken);
 
-		a.copy_to_device(std::span(host_a.memptr(), host_a.n_elem));
-		b.copy_to_device(std::span(host_b.memptr(), host_b.n_elem));
+	static constexpr auto size_matmul = 5000U;
 
-		auto a_ptr = a.get_device_ptr();
-		auto b_ptr = b.get_device_ptr();
-		auto result_data_ptr = c.get_device_ptr();
-		int N = 10;
-		int size = N * N;
-		std::array<void *, 4> args = {
-				&a_ptr,
-				&b_ptr,
-				&result_data_ptr,
-				&size,
-		};
+	cuda::MatrixMemory<float> output_matmul_memory{
+			ctx,
+			size_matmul,
+			size_matmul,
+			arma::fill::randu,
+	};
+	cuda::MatrixMemory<float> host_matmul_left{
+			ctx,
+			size_matmul,
+			size_matmul,
+			arma::fill::randu,
+	};
+	cuda::MatrixMemory<float> host_matmul_right{
+			ctx,
+			size_matmul,
+			size_matmul,
+			arma::fill::zeros,
+	};
 
-		// Start a stream
-		CUstream stream;
-		CUDA_CHECK(cuStreamCreate(&stream, 0));
+	dim3 block_matmul(32, 32);
+	dim3 grid_size((size_matmul + block_matmul.x - 1) / block_matmul.x,
+								 (size_matmul + block_matmul.y - 1) / block_matmul.y);
+	std::array sizes{size_matmul, size_matmul, size_matmul, size_matmul};
+	bool is_column_major{true};
+	std::array matmul_data{
+			(void *)&host_matmul_left.get_device_ptr(),
+			(void *)&host_matmul_right.get_device_ptr(),
+			(void *)&output_matmul_memory.get_device_ptr(),
+			(void *)&sizes.at(0),
+			(void *)&sizes.at(1),
+			(void *)&sizes.at(2),
+			(void *)&sizes.at(3),
+			(void *)&is_column_major,
+	};
+	std::array<double, 100> times_storage{};
+	for (auto i : std::views::iota(0U, times_storage.size())) {
 
-		// Start time event
-		CUevent start, stop;
-		CUDA_CHECK(cuEventCreate(&start, 0)); // Start event
-		CUDA_CHECK(cuEventCreate(&stop, 0));	// Stop event
-		CUDA_CHECK(cuEventRecord(start, stream));
-
-		dim3 block(N, N);
-		dim3 grid(1, 1);
-
-		CUDA_CHECK(cuLaunchKernel(func, grid.x, grid.y, grid.z, block.x, block.y,
-															block.z, 0, stream, args.data(), nullptr));
-
-		CUDA_CHECK(cuEventRecord(stop, stream));
-		CUDA_CHECK(cuEventSynchronize(stop));
-
-		float time;
-		CUDA_CHECK(cuEventElapsedTime(&time, start, stop));
-		info("Kernel execution time: {} ms", time);
-
-		arma::Mat<float> result(10, 10, arma::fill::zeros);
-		c.copy_to_host(std::span(result.memptr(), result.n_elem));
-		std::stringstream ss;
-		ss << result;
-		info("Result: {}", ss.str());
-
-	} catch (const std::exception &e) {
-		error("{}", e.what());
-		return 1;
+		auto &&[matmul_time_taken] =
+				kernel.launch_kernel("matmul", grid_size, block_matmul, matmul_data);
+		times_storage.at(i) = matmul_time_taken;
 	}
+
+	arma::rowvec times{times_storage.data(), times_storage.size()};
+	info("Total time: {}s, Average time: {}ms, std: {}ms",
+			 arma::sum(times) / 1000.0, arma::mean(times), arma::stddev(times, 1));
+
+	host_c.copy_to_host();
+	std::stringstream ss;
+	ss << host_c.get_cpu_data();
+
+	info("Are CPU side and GPU cuda:: computation (addition) almost (1e-5, "
+			 "absdiff) equal? "
+			 "{}",
+			 arma::approx_equal(host_c.get_cpu_data(),
+													host_a.get_cpu_data() + host_b.get_cpu_data(),
+													"absdiff", 1e-5));
+
+	output_matmul_memory.copy_to_host();
+	info(
+			"Are CPU side and GPU cuda:: computation (matmul) almost (1e-5, absdiff) "
+			"equal? "
+			"{}",
+			arma::approx_equal(host_c.get_cpu_data(),
+												 host_a.get_cpu_data() * host_b.get_cpu_data(),
+												 "absdiff", 1e-5));
+
 	return 0;
 }

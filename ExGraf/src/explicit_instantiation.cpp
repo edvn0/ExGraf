@@ -24,6 +24,8 @@ EXGRAF_ALLOWED_TYPES
 	template class Add<T>;                                                       \
 	template class ReLU<T>;                                                      \
 	template class CrossEntropyLoss<T>;                                          \
+	template class MSELoss<T>;                                                   \
+	template class Subtract<T>;                                                  \
 	template class Softmax<T>;                                                   \
 	template class Neg<T>;                                                       \
 	template class SumAxis<T>;                                                   \

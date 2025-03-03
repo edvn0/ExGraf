@@ -17,7 +17,7 @@ public:
 	~SGDOptimizer() override = default;
 
 	auto step(std::span<Var *> trainable_nodes) -> void override {
-		for (Var *node : trainable_nodes) {
+		for (auto *node : trainable_nodes) {
 			node->get_value() -= learning_rate * node->get_gradient();
 		}
 	}

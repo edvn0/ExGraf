@@ -115,7 +115,19 @@ target_precompile_headers(ExGraf PUBLIC include/exgraf/exgraf_pch.hpp)
 
 target_compile_definitions(ExGraf PUBLIC EXPORT_RABBIT_MQ_TRANSPORT)
 
-file(COPY resources DESTINATION ${CMAKE_BINARY_DIR})
+add_custom_target(copy_resources ALL
+	COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/resources
+	COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_CURRENT_SOURCE_DIR}/resources ${CMAKE_CURRENT_BINARY_DIR}/resources
+	COMMENT "Ensuring resources folder exists and copying files..."
+)
+
+file(GLOB_RECURSE RESOURCE_FILES ${CMAKE_CURRENT_SOURCE_DIR}/resources/*)
+
+add_custom_command(
+	TARGET copy_resources
+	DEPENDS ${RESOURCE_FILES}
+	COMMENT "Monitoring resources for changes..."
+)
 
 # Option to build the tests
 if(BUILD_TESTS)

@@ -83,12 +83,11 @@ public:
 		// Loss function
 		switch (config.loss_function) {
 		case LossFunction::CrossEntropy: {
-			// op = Negate(Sum(Sum(Hadamard(Y, log(P)), axis=1), axis=0))
-			auto log = add_node<Log<T>>(predictor);
-			auto hadamard = add_node<Hadamard<T>>(y, log);
-			auto sum_axis_1 = add_node<SumAxis<T>>(hadamard, 1);
-			auto sum_axis_2 = add_node<SumAxis<T>>(sum_axis_1, 0);
-			output = add_node<Neg<T>>(sum_axis_2);
+			output = add_node<CrossEntropyLoss<T>>(predictor, y);
+			break;
+		}
+		case LossFunction::MeanSquaredError: {
+			output = add_node<MSELoss<T>>(predictor, y);
 			break;
 		}
 		default:

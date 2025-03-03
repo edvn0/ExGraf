@@ -39,6 +39,11 @@ private:
 	}
 
 	auto get_shape_label(const Node<T> *node) -> std::string {
+		// Skip shape label for operation nodes
+		if (dynamic_cast<const Operation<T> *>(node)) {
+			return "";
+		}
+
 		try {
 			if (node->has_value()) {
 				return "(" + std::to_string(node->rows()) + ", " +
@@ -48,34 +53,24 @@ private:
 		}
 		return "(?, ?)";
 	}
-	template <class U>
-	static constexpr auto is =
-			[](const auto *v) { return dynamic_cast<const U *>(v) != nullptr; };
-	auto get_node_color(const Node<T> *node) -> std::string {
 
+	auto get_node_color(const Node<T> *node) -> std::string {
 		if (node->is_bias()) {
 			return "lightblue";
 		} else if (node->is_weight()) {
 			return "lightgreen";
-		} else if (is<Placeholder<T>>(node)) {
+		} else if (dynamic_cast<const Placeholder<T> *>(node)) {
 			return "gold";
-		} else if (is<ReLU<T>>(node)) {
-			return "lightcoral";
-		} else if (is<Softmax<T>>(node)) {
-			return "lightpink";
-		} else if (is<CrossEntropyLoss<T>>(node)) {
-			return "salmon";
+		} else if (dynamic_cast<const Operation<T> *>(node)) {
+			return "white"; // Operations should stand out as separate
 		} else {
-			return "white";
+			return "lightgray"; // Default for non-operations
 		}
 	}
 
 	auto process_node(const Node<T> &n) -> void {
 		const auto *node = &n;
-		if (node == nullptr)
-			throw std::runtime_error("What are you doing????");
-
-		if (visited.contains(node)) {
+		if (!node || visited.contains(node)) {
 			return;
 		}
 
@@ -84,9 +79,11 @@ private:
 		auto shape_label = get_shape_label(node);
 		auto color = get_node_color(node);
 
-		dot_stream << "  " << id << " [label=\"" << node->name() << "\\n"
-							 << shape_label << "\", style=filled, fillcolor=" << color
-							 << "];\n";
+		dot_stream << "  " << id << " [label=\"" << node->name();
+		if (!shape_label.empty()) {
+			dot_stream << "\\n" << shape_label;
+		}
+		dot_stream << "\", style=filled, fillcolor=" << color << "];\n";
 
 		for (const auto *input : node->get_all_inputs()) {
 			process_node(*input);
@@ -97,14 +94,13 @@ private:
 	constexpr auto to_string(VisualisationMode m) -> std::string_view {
 		switch (m) {
 		case VisualisationMode::TopToBottom:
-			return std::string_view{"TB"};
+			return "TB";
 		case VisualisationMode::BottomToTop:
-			return std::string_view{"BT"};
+			return "BT";
 		case VisualisationMode::LeftToRight:
-			return std::string_view{"LR"};
+			return "LR";
 		case VisualisationMode::RightToLeft:
-			return std::string_view{"RL"};
-			break;
+			return "RL";
 		default:
 			std::abort();
 		}

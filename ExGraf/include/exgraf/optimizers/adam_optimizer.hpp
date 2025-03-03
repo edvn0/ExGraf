@@ -28,9 +28,9 @@ public:
 	auto step(std::span<Var *> trainable_nodes) -> void override {
 		t++;
 
-		for (Var *node : trainable_nodes) {
+		for (auto *node : trainable_nodes) {
 			auto &value = node->get_value();
-			auto &grad = node->get_gradient();
+			const auto &grad = node->get_gradient();
 
 			if (!m.contains(node)) {
 				m[node] = arma::zeros<arma::Mat<T>>(value.n_rows, value.n_cols);
@@ -40,17 +40,12 @@ public:
 			}
 
 			m[node] = beta1 * m[node] + (1 - beta1) * grad;
-
 			v[node] = beta2 * v[node] + (1 - beta2) * (grad % grad);
 
 			auto m_hat = m[node] / (1 - std::pow(beta1, static_cast<T>(t)));
-
 			auto v_hat = v[node] / (1 - std::pow(beta2, static_cast<T>(t)));
 
 			value -= learning_rate * m_hat / (arma::sqrt(v_hat) + epsilon);
-
-			// Clear gradients
-			node->zero_gradient();
 		}
 	}
 };

@@ -22,6 +22,8 @@ enum class NodeType : std::uint8_t {
 	Mult,
 	Softmax,
 	CrossEntropyLoss,
+	MSELoss,
+	Subtract,
 	ReLU,
 	Tanh,
 	Sum,

@@ -6,6 +6,22 @@
 
 namespace ExGraf {
 
+template <AllowedTypes T> class Operation : public Node<T> {
+public:
+	using Node<T>::Node;
+};
+
+template <AllowedTypes T> class UnaryOperation : public Operation<T> {
+public:
+	explicit UnaryOperation(NodeType t, Node<T> *i) : Operation<T>(t, {i}) {}
+};
+
+template <AllowedTypes T> class BinaryOperation : public Operation<T> {
+public:
+	BinaryOperation(NodeType t, Node<T> *l, Node<T> *r)
+			: Operation<T>(t, {l, r}) {}
+};
+
 struct IncompatibleDimensionsError : std::logic_error {
 	template <AllowedTypes T>
 	IncompatibleDimensionsError(const arma::Mat<T> &lhs, const arma::Mat<T> &rhs)
@@ -15,10 +31,10 @@ struct IncompatibleDimensionsError : std::logic_error {
 																		 rhs.n_cols)) {}
 };
 
-template <AllowedTypes T> class Hadamard : public Node<T> {
+template <AllowedTypes T> class Hadamard : public BinaryOperation<T> {
 public:
 	Hadamard(Node<T> *lhs, Node<T> *rhs)
-			: Node<T>(NodeType::Hadamard, {lhs, rhs}) {}
+			: BinaryOperation<T>(NodeType::Hadamard, lhs, rhs) {}
 
 	auto accept(NodeVisitor<T> &visitor) -> void override {
 		visitor.visit(*this);
@@ -69,9 +85,10 @@ public:
 	auto name() const -> std::string_view override { return "Hadamard"; }
 };
 
-template <AllowedTypes T> class Mult : public Node<T> {
+template <AllowedTypes T> class Mult : public BinaryOperation<T> {
 public:
-	Mult(Node<T> *lhs, Node<T> *rhs) : Node<T>(NodeType::Mult, {lhs, rhs}) {}
+	Mult(Node<T> *lhs, Node<T> *rhs)
+			: BinaryOperation<T>(NodeType::Mult, lhs, rhs) {}
 
 	auto accept(NodeVisitor<T> &visitor) -> void override {
 		visitor.visit(*this);
@@ -123,9 +140,10 @@ public:
 	auto name() const -> std::string_view override { return "Mult"; }
 };
 
-template <AllowedTypes T> class Add : public Node<T> {
+template <AllowedTypes T> class Add : public BinaryOperation<T> {
 public:
-	Add(Node<T> *lhs, Node<T> *rhs) : Node<T>(NodeType::Add, {lhs, rhs}) {}
+	Add(Node<T> *lhs, Node<T> *rhs)
+			: BinaryOperation<T>(NodeType::Add, lhs, rhs) {}
 
 	auto accept(NodeVisitor<T> &visitor) -> void override {
 		visitor.visit(*this);
@@ -182,9 +200,9 @@ public:
 	auto name() const -> std::string_view override { return "Add"; }
 };
 
-template <AllowedTypes T> class Tanh : public Node<T> {
+template <AllowedTypes T> class Tanh : public UnaryOperation<T> {
 public:
-	explicit Tanh(Node<T> *input) : Node<T>(NodeType::Tanh, {input}) {}
+	explicit Tanh(Node<T> *input) : UnaryOperation<T>(NodeType::Tanh, input) {}
 
 	auto accept(NodeVisitor<T> &visitor) -> void override {
 		visitor.visit(*this);
@@ -224,13 +242,13 @@ public:
 	auto name() const -> std::string_view override { return "Tanh"; }
 };
 
-template <AllowedTypes T> class ReLU : public Node<T> {
+template <AllowedTypes T> class ReLU : public UnaryOperation<T> {
 	T clamp{std::numeric_limits<T>::infinity()};
 	T lower{static_cast<T>(0.05)};
 
 public:
 	explicit ReLU(Node<T> *input, T c = std::numeric_limits<T>::infinity())
-			: Node<T>(NodeType::ReLU, {input}), clamp(c) {}
+			: UnaryOperation<T>(NodeType::ReLU, input), clamp(c) {}
 
 	auto accept(NodeVisitor<T> &visitor) -> void override {
 		visitor.visit(*this);
@@ -298,12 +316,12 @@ public:
 	auto name() const -> std::string_view override { return "ReLU"; }
 };
 
-template <AllowedTypes T> class SumAxis : public Node<T> {
+template <AllowedTypes T> class SumAxis : public UnaryOperation<T> {
 	int axis;
 
 public:
 	SumAxis(Node<T> *input, int a = -1)
-			: Node<T>(NodeType::Sum, {input}), axis(a) {}
+			: UnaryOperation<T>(NodeType::Sum, input), axis(a) {}
 
 	auto accept(NodeVisitor<T> &visitor) -> void override {
 		visitor.visit(*this);
@@ -345,9 +363,9 @@ public:
 	auto name() const -> std::string_view override { return "SumAxis"; }
 };
 
-template <AllowedTypes T> class Log : public Node<T> {
+template <AllowedTypes T> class Log : public UnaryOperation<T> {
 public:
-	explicit Log(Node<T> *input) : Node<T>(NodeType::Log, {input}) {}
+	explicit Log(Node<T> *input) : UnaryOperation<T>(NodeType::Log, input) {}
 
 	auto accept(NodeVisitor<T> &visitor) -> void override {
 		visitor.visit(*this);
@@ -370,9 +388,9 @@ public:
 	auto name() const -> std::string_view override { return "Log"; }
 };
 
-template <AllowedTypes T> class Neg : public Node<T> {
+template <AllowedTypes T> class Neg : public UnaryOperation<T> {
 public:
-	explicit Neg(Node<T> *input) : Node<T>(NodeType::Negate, {input}) {}
+	explicit Neg(Node<T> *input) : UnaryOperation<T>(NodeType::Negate, input) {}
 
 	auto accept(NodeVisitor<T> &visitor) -> void override {
 		visitor.visit(*this);
@@ -393,11 +411,14 @@ public:
 
 	auto name() const -> std::string_view override { return "Neg"; }
 };
+template <AllowedTypes T> class CrossEntropyLoss : public BinaryOperation<T> {
+	static constexpr T epsilon = static_cast<T>(1e-7);
+	static constexpr T inverted_epsilon =
+			static_cast<T>(1.0) - static_cast<T>(1e-7);
 
-template <AllowedTypes T> class CrossEntropyLoss : public Node<T> {
 public:
 	CrossEntropyLoss(Node<T> *prediction, Node<T> *target)
-			: Node<T>(NodeType::CrossEntropyLoss, {prediction, target}) {}
+			: BinaryOperation<T>(NodeType::CrossEntropyLoss, prediction, target) {}
 
 	auto accept(NodeVisitor<T> &visitor) -> void override {
 		visitor.visit(*this);
@@ -406,7 +427,6 @@ public:
 	auto forward() -> arma::Mat<T> override {
 		auto p = this->inputs[0]->forward();
 		auto t = this->inputs[1]->forward();
-
 		trace("CrossEntropyLoss::forward - Prediction shape: ({}, {}), Target "
 					"shape: ({}, {})",
 					p.n_rows, p.n_cols, t.n_rows, t.n_cols);
@@ -422,11 +442,14 @@ public:
 			throw IncompatibleDimensionsError(p, t);
 		}
 
-		arma::Mat<T> pointwise_loss = -aligned % arma::log(p);
-		T total_loss = arma::accu(pointwise_loss); // Sum all elements
+		// Add epsilon for numerical stability
+		arma::Mat<T> stabilized_p = arma::clamp(p, epsilon, inverted_epsilon);
+
+		arma::Mat<T> pointwise_loss = -aligned % arma::log(stabilized_p);
+		T total_loss = arma::accu(pointwise_loss);
+
 		arma::Mat<T> result(1, 1);
 		result(0, 0) = total_loss;
-
 		trace("CrossEntropyLoss::forward - Loss value: {}", total_loss);
 		this->value = std::move(result);
 		return *this->value;
@@ -442,8 +465,15 @@ public:
 		bool needs_transpose = (p.n_rows == t.n_cols && p.n_cols == t.n_rows);
 		arma::Mat<T> aligned = needs_transpose ? t.t() : t;
 
-		arma::Mat<T> pred_grad = -(aligned / p);
-		arma::Mat<T> target_grad = -arma::log(p);
+		// Add epsilon for numerical stability
+		arma::Mat<T> stabilized_p = arma::clamp(p, epsilon, inverted_epsilon);
+
+		// Scale the gradient by the incoming gradient
+		arma::Mat<T> pred_grad = -(aligned / stabilized_p);
+		arma::Mat<T> target_grad = -arma::log(stabilized_p);
+
+		pred_grad *= grad(0, 0);
+		target_grad *= grad(0, 0);
 
 		if (needs_transpose) {
 			target_grad = target_grad.t();
@@ -461,9 +491,10 @@ public:
 	auto name() const -> std::string_view override { return "CrossEntropyLoss"; }
 };
 
-template <AllowedTypes T> class Softmax : public Node<T> {
+template <AllowedTypes T> class Softmax : public UnaryOperation<T> {
 public:
-	explicit Softmax(Node<T> *input) : Node<T>(NodeType::Softmax, {input}) {}
+	explicit Softmax(Node<T> *input)
+			: UnaryOperation<T>(NodeType::Softmax, {input}) {}
 
 	auto accept(NodeVisitor<T> &visitor) -> void override {
 		visitor.visit(*this);
@@ -504,6 +535,129 @@ public:
 	}
 
 	auto name() const -> std::string_view override { return "Softmax"; }
+};
+
+template <AllowedTypes T> class Subtract : public BinaryOperation<T> {
+public:
+	Subtract(Node<T> *lhs, Node<T> *rhs)
+			: BinaryOperation<T>(NodeType::Subtract, lhs, rhs) {}
+
+	auto accept(NodeVisitor<T> &visitor) -> void override {
+		visitor.visit(*this);
+	}
+
+	auto forward() -> arma::Mat<T> override {
+		auto lhs_val = this->inputs[0]->forward();
+		auto rhs_val = this->inputs[1]->forward();
+
+		arma::Mat<T> out;
+		if (lhs_val.n_rows == 1 && lhs_val.n_cols == rhs_val.n_cols &&
+				rhs_val.n_rows > 1) {
+			out = arma::repmat(lhs_val, rhs_val.n_rows, 1) - rhs_val;
+		} else if (rhs_val.n_rows == 1 && rhs_val.n_cols == lhs_val.n_cols &&
+							 lhs_val.n_rows > 1) {
+			out = lhs_val - arma::repmat(rhs_val, lhs_val.n_rows, 1);
+		} else if (lhs_val.n_cols == 1 && lhs_val.n_rows == rhs_val.n_rows &&
+							 rhs_val.n_cols > 1) {
+			out = arma::repmat(lhs_val, 1, rhs_val.n_cols) - rhs_val;
+		} else if (rhs_val.n_cols == 1 && rhs_val.n_rows == lhs_val.n_rows &&
+							 lhs_val.n_cols > 1) {
+			out = lhs_val - arma::repmat(rhs_val, 1, lhs_val.n_cols);
+		} else if (lhs_val.n_rows == rhs_val.n_rows &&
+							 lhs_val.n_cols == rhs_val.n_cols) {
+			out = lhs_val - rhs_val;
+		} else {
+			throw IncompatibleDimensionsError(lhs_val, rhs_val);
+		}
+
+		this->value = out;
+		return out;
+	}
+
+	auto backward(arma::Mat<T> const &grad) -> void override {
+		auto lhs_val = this->inputs[0]->forward();
+		auto rhs_val = this->inputs[1]->forward();
+
+		arma::Mat<T> grad_lhs = grad;
+		if (lhs_val.n_rows == 1 && grad_lhs.n_rows > 1)
+			grad_lhs = arma::sum(grad_lhs, 0);
+		if (lhs_val.n_cols == 1 && grad_lhs.n_cols > 1)
+			grad_lhs = arma::sum(grad_lhs, 1);
+
+		arma::Mat<T> grad_rhs = -grad; // Negative gradient for the subtracted term
+		if (rhs_val.n_rows == 1 && grad_rhs.n_rows > 1)
+			grad_rhs = arma::sum(grad_rhs, 0);
+		if (rhs_val.n_cols == 1 && grad_rhs.n_cols > 1)
+			grad_rhs = arma::sum(grad_rhs, 1);
+
+		this->inputs[0]->backward(grad_lhs);
+		this->inputs[1]->backward(grad_rhs);
+	}
+
+	auto name() const -> std::string_view override { return "Subtract"; }
+};
+
+template <AllowedTypes T> class MSELoss : public BinaryOperation<T> {
+public:
+	MSELoss(Node<T> *prediction, Node<T> *target)
+			: BinaryOperation<T>(NodeType::MSELoss, prediction, target) {}
+
+	auto accept(NodeVisitor<T> &visitor) -> void override {
+		visitor.visit(*this);
+	}
+
+	auto forward() -> arma::Mat<T> override {
+		auto predictions = this->inputs[0]->forward();
+		auto targets = this->inputs[1]->forward();
+
+		trace(
+				"MSELoss::forward - Prediction shape: ({}, {}), Target shape: ({}, {})",
+				predictions.n_rows, predictions.n_cols, targets.n_rows, targets.n_cols);
+
+		if (predictions.n_rows != targets.n_rows ||
+				predictions.n_cols != targets.n_cols) {
+			throw IncompatibleDimensionsError(predictions, targets);
+		}
+
+		arma::Mat<T> squared_diff = arma::square(predictions - targets);
+
+		T mse = arma::mean(arma::mean(squared_diff));
+
+		arma::Mat<T> result(1, 1);
+		result(0, 0) = mse;
+
+		trace("MSELoss::forward - Loss value: {}", mse);
+		this->value = std::move(result);
+		return *this->value;
+	}
+
+	auto backward(const arma::Mat<T> &grad) -> void override {
+		trace("MSELoss::backward - Gradient shape: ({}, {})", grad.n_rows,
+					grad.n_cols);
+
+		auto predictions = this->inputs[0]->forward();
+		auto targets = this->inputs[1]->forward();
+
+		// Gradient of MSE with respect to predictions
+		// dL/dpred = 2 * (pred - target) / n
+		T scale = static_cast<T>(2.0) / (static_cast<T>(predictions.n_rows) *
+																		 static_cast<T>(predictions.n_cols));
+		arma::Mat<T> pred_grad = scale * (predictions - targets) * grad(0, 0);
+
+		// Gradient of MSE with respect to targets
+		// dL/dtarget = -2 * (pred - target) / n
+		arma::Mat<T> target_grad = -pred_grad;
+
+		trace("MSELoss::backward - Prediction gradient shape: ({}, {}), Target "
+					"gradient shape: ({}, {})",
+					pred_grad.n_rows, pred_grad.n_cols, target_grad.n_rows,
+					target_grad.n_cols);
+
+		this->inputs[0]->backward(pred_grad);
+		this->inputs[1]->backward(target_grad);
+	}
+
+	auto name() const -> std::string_view override { return "MSELoss"; }
 };
 
 } // namespace ExGraf

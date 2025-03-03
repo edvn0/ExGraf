@@ -1,5 +1,6 @@
 #include "exgraf/model_configuration.hpp"
 #include "exgraf/optimizers/adam_optimizer.hpp"
+#include "exgraf/optimizers/sgd_optimizer.hpp"
 #include <exgraf.hpp>
 
 #include <algorithm>
@@ -74,7 +75,7 @@ auto batch_predict(TrainablePredictor<T> auto &graph,
 		}
 		auto output = graph.predict(batch_images);
 		T batch_loss = graph.train(batch_labels)(0, 0);
-		epoch_loss += batch_loss * static_cast<T>(current_batch_size);
+		epoch_loss += batch_loss;
 		for (std::size_t i = 0; i < current_batch_size; ++i) {
 			arma::uword pred_label{};
 			arma::uword true_label{};
@@ -88,6 +89,95 @@ auto batch_predict(TrainablePredictor<T> auto &graph,
 			epoch_loss / static_cast<T>(num_samples),
 			correct_predictions,
 	};
+}
+
+auto do_xor() -> void {
+
+	using T = double;
+
+	const size_t num_samples_xor = 4000;
+	auto X = arma::Mat<T>(num_samples_xor, 2);
+	auto y = arma::Mat<T>(num_samples_xor, 2);
+
+	X.randu();
+	X = arma::round(X);
+
+	for (size_t i = 0; i < num_samples_xor; ++i) {
+		bool xor_result = (X(i, 0) != X(i, 1));
+		y(i, 0) = xor_result ? 1 : 0;
+		y(i, 1) = xor_result ? 0 : 1;
+	}
+
+	Sequential<T> xor_model;
+	xor_model.add_layer(2, ActivationFunction::Tanh, "input");
+	xor_model.add_layer(40, ActivationFunction::Tanh, "hidden1");
+	xor_model.add_layer(2, ActivationFunction::Tanh, "output");
+	xor_model.compile<ADAMOptimizer<T>>(0.1);
+
+	// Set up training parameters
+	std::size_t num_epochs = 1000;
+	std::size_t batch_size = 64;
+	std::vector<std::size_t> indices(num_samples_xor);
+	std::ranges::iota(indices, 0);
+	std::random_device rd;
+	std::mt19937 g(rd());
+
+	for (std::size_t epoch = 0; epoch < num_epochs; ++epoch) {
+		std::ranges::shuffle(indices, g);
+
+		T epoch_loss = 0.0;
+		std::size_t correct_predictions = 0;
+
+		for (std::size_t batch_start = 0; batch_start < num_samples_xor;
+				 batch_start += batch_size) {
+			std::size_t current_batch_size =
+					std::min(batch_size, num_samples_xor - batch_start);
+
+			arma::mat batch_X(current_batch_size, X.n_cols);
+			arma::mat batch_y(current_batch_size, y.n_cols);
+
+			for (std::size_t i = 0; i < current_batch_size; ++i) {
+				std::size_t idx = indices[batch_start + i];
+				batch_X.row(i) = X.row(idx);
+				batch_y.row(i) = y.row(idx);
+			}
+
+			auto output = xor_model.predict(batch_X);
+			T batch_loss = xor_model.train(batch_y)(0, 0);
+
+			epoch_loss += batch_loss * static_cast<T>(current_batch_size);
+
+			for (std::size_t i = 0; i < current_batch_size; ++i) {
+				arma::uword pred_label{};
+				arma::uword true_label{};
+				output.row(i).max(pred_label);
+				batch_y.row(i).max(true_label);
+				correct_predictions +=
+						static_cast<std::size_t>(pred_label == true_label);
+			}
+		}
+
+		T avg_loss = epoch_loss / static_cast<T>(num_samples_xor);
+		T accuracy =
+				static_cast<T>(correct_predictions) / static_cast<T>(num_samples_xor);
+
+		if (epoch % 100 == 0 || epoch == num_epochs - 1) {
+			info("Epoch {}/{}: Loss = {:.6f}, Accuracy = {:.2f}%", epoch + 1,
+					 num_epochs, avg_loss, accuracy * 100.0);
+		}
+	}
+
+	arma::Mat<T> test_X = {{0, 0}, {0, 1}, {1, 0}, {1, 1}};
+
+	arma::Mat<T> predicted = xor_model.predict(test_X);
+	info("XOR Test Results:");
+	for (std::size_t i = 0; i < 4; ++i) {
+		arma::uword pred_label{};
+		predicted.row(i).max(pred_label);
+		info("Input: [{}, {}], Predicted: {}, Output: [{:.4f}, {:.4f}]",
+				 static_cast<int>(test_X(i, 0)), static_cast<int>(test_X(i, 1)),
+				 pred_label, predicted(i, 0), predicted(i, 1));
+	}
 }
 
 struct Metrics {
@@ -147,55 +237,21 @@ int main(int argc, char **argv) {
 	if (!bus_configuration) {
 		return 1;
 	}
-	auto &&[user_value, password_value, host_value, port_value] =
-			*bus_configuration;
 
 	using T = double;
-	ExpressionGraph<T> graph({784, 10, 10});
+	ExpressionGraph<T> graph({784, 30, 30, 10});
 	graph.compile_model<ADAMOptimizer<T>>(
-			{.input_size = {ExpressionGraph<T>::ModelConfig::unused, 784}}, 0.001,
-			0.9, 0.99);
+			{
+					.input_size =
+							{
+									ExpressionGraph<T>::ModelConfig::unused,
+									784,
+							},
+					.loss_function = LossFunction::CrossEntropy,
+			},
+			0.001, 0.9, 0.99);
 
-	// Generate a LARGE XOR dataset
-	auto single_batch_x = arma::Mat<T>{
-			{0, 0},
-			{0, 1},
-			{1, 0},
-			{1, 1},
-	};
-	auto single_batch_y = arma::Mat<T>{
-			{0, 1},
-			{1, 0},
-			{1, 0},
-			{0, 1},
-	};
-
-	// Repeat the dataset 1000 times
-	auto X = arma::Mat<T>(single_batch_x.n_rows * 1000, single_batch_x.n_cols);
-	auto y = arma::Mat<T>(single_batch_y.n_rows * 1000, single_batch_y.n_cols);
-	for (std::size_t i = 0; i < 1000; ++i) {
-		X.rows(i * 4, (i + 1) * 4 - 1) = single_batch_x;
-		y.rows(i * 4, (i + 1) * 4 - 1) = single_batch_y;
-	}
-
-	Sequential<T> xor_model;
-	xor_model.add_layer(2, ActivationFunction::Tanh, "input");
-	xor_model.add_layer(2, ActivationFunction::ReLU, "hidden1");
-	xor_model.add_layer(2, ActivationFunction::Tanh, "output");
-	xor_model.compile<ADAMOptimizer<T>>(0.0001);
-
-	auto xor_indices = std::vector<std::size_t>{0, 1, 2, 3};
-	auto xor_confusion_matrix = arma::Mat<std::size_t>(2, 2, arma::fill::zeros);
-
-	for (std::size_t epoch = 0; epoch < 1000; ++epoch) {
-		auto [epoch_loss, correct_predictions] = batch_predict<T>(
-				xor_model, X, y, 4, 4, xor_indices, xor_confusion_matrix);
-
-		if (epoch % 100 == 0) {
-			fmt::print("Epoch {}: Loss = {:.6f}, Correct = {}\n", epoch, epoch_loss,
-								 correct_predictions);
-		}
-	}
+	// 	do_xor();
 
 	auto &&[images, labels] =
 			MNIST::load("https://raw.githubusercontent.com/fgnt/mnist/master/"
@@ -204,8 +260,8 @@ int main(int argc, char **argv) {
 									"train-labels-idx1-ubyte.gz");
 
 	std::size_t num_samples = images.n_rows;
-	std::size_t num_epochs = 300;
-	std::size_t batch_size = 128;
+	std::size_t num_epochs = 50;
+	std::size_t batch_size = 32;
 	std::vector<std::size_t> indices(num_samples);
 	std::ranges::iota(indices, 0);
 	std::random_device rd;
@@ -214,6 +270,9 @@ int main(int argc, char **argv) {
 	graph.visit<GraphvizVisitor<T>>("mnist_other.dot",
 																	VisualisationMode::LeftToRight);
 
+#ifdef USE_BUS
+	auto &&[user_value, password_value, host_value, port_value] =
+			*bus_configuration;
 #ifdef USE_ZERO_MQ
 	Messaging::BusMetricsLogger<Messaging::ZeroMQTransport> logger(
 			"tcp://*:5555");
@@ -224,6 +283,7 @@ int main(int argc, char **argv) {
 	info("Connection uri: {}", amqp_uri);
 	logger.wait_for_connection();
 #endif
+#endif
 
 	Bus::Models::ModelConfiguration model = {
 			.name = "MNIST",
@@ -231,8 +291,10 @@ int main(int argc, char **argv) {
 			.optimizer = "ADAM",
 			.learning_rate = 0.001,
 	};
+#ifdef USE_BUS
 	logger.write_object<Bus::Models::ModelConfiguration>(
 			model, Messaging::Outbox::ModelConfiguration);
+#endif
 
 	for (size_t epoch = 0; epoch < num_epochs; ++epoch) {
 		arma::Mat<size_t> confusion_matrix(10, 10, arma::fill::zeros);
@@ -247,6 +309,8 @@ int main(int argc, char **argv) {
 		auto mean_ppv = arma::mean(arma::vec(positive_predictive_values));
 		auto mean_fpr = arma::mean(arma::vec(false_positive_rates));
 		auto mean_recall = arma::mean(arma::vec(recalls));
+#ifdef USE_BUS
+
 		logger.write_object<Bus::Models::MetricsMessage>(
 				{
 						.epoch = static_cast<std::int32_t>(epoch + 1),
@@ -258,11 +322,14 @@ int main(int argc, char **argv) {
 						.model_configuration = &model,
 				},
 				Messaging::Outbox::Metrics);
+#endif
 		info("Epoch {}/{}: Loss={:.4f}, Accuracy={:.2f}%, PPV={:.4f}, "
-				 "FPR={:.4f}, Recall={:.4f}\n",
+				 "FPR={:.4f}, Recall={:.4f}",
 				 epoch + 1, num_epochs, epoch_loss, accuracy * 100.0, mean_ppv,
 				 mean_fpr, mean_recall);
 	}
+#ifdef USE_BUS
 	logger.wait_for_shutdown();
+#endif
 	return 0;
 }

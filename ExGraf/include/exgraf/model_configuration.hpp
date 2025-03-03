@@ -87,7 +87,6 @@ enum class OutputActivationFunction : std::uint8_t {
 };
 enum class OptimizerType : std::uint8_t {
 	SGD,
-
 	ADAM,
 };
 

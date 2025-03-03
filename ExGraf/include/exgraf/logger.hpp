@@ -19,7 +19,7 @@ public:
 			auto sink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
 			auto log = std::make_shared<spdlog::logger>("app_logger", sink);
 			spdlog::register_logger(log);
-			log->set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%^%l%$] [thread %t] %v");
+			log->set_pattern("[%^%l%$] [%H:%M:%S.%e] %v");
 			log->set_level(spdlog::level::debug);
 			if (const auto log_level = get_from_environment("LOG_LEVEL");
 					log_level.empty()) {
@@ -36,6 +36,7 @@ public:
 			auto file_sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(
 					"graphviz.dot", false);
 			auto log = std::make_shared<spdlog::logger>("graphviz_logger", file_sink);
+			log->set_pattern("[%^%l%$] [%H:%M:%S.%e] %v");
 			spdlog::register_logger(log);
 			if (const auto log_level = get_from_environment("LOG_LEVEL");
 					log_level.empty()) {
@@ -53,36 +54,31 @@ public:
 template <typename... Args>
 static auto info(const fmt::format_string<Args...> &fmt, Args &&...args)
 		-> void {
-	Logger::instance().info("[INFO] {}",
-													fmt::format(fmt, std::forward<Args>(args)...));
+	Logger::instance().info("{}", fmt::format(fmt, std::forward<Args>(args)...));
 }
 
 template <typename... Args>
 static auto error(const fmt::format_string<Args...> &fmt, Args &&...args)
 		-> void {
-	Logger::instance().error("[ERROR] {}",
-													 fmt::format(fmt, std::forward<Args>(args)...));
+	Logger::instance().error("{}", fmt::format(fmt, std::forward<Args>(args)...));
 }
 
 template <typename... Args>
 static auto debug(const fmt::format_string<Args...> &fmt, Args &&...args)
 		-> void {
-	Logger::instance().debug("[DEBUG] {}",
-													 fmt::format(fmt, std::forward<Args>(args)...));
+	Logger::instance().debug("{}", fmt::format(fmt, std::forward<Args>(args)...));
 }
 
 template <typename... Args>
 static auto trace(const fmt::format_string<Args...> &fmt, Args &&...args)
 		-> void {
-	Logger::instance().trace("[TRACE] {}",
-													 fmt::format(fmt, std::forward<Args>(args)...));
+	Logger::instance().trace("{}", fmt::format(fmt, std::forward<Args>(args)...));
 }
 
 template <typename... Args>
 static auto warn(const fmt::format_string<Args...> &fmt, Args &&...args)
 		-> void {
-	Logger::instance().warn("[WARN] {}",
-													fmt::format(fmt, std::forward<Args>(args)...));
+	Logger::instance().warn("{}", fmt::format(fmt, std::forward<Args>(args)...));
 }
 
 inline auto log_graphviz(const std::string &graphviz_content) -> void {

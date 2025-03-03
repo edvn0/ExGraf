@@ -37,6 +37,7 @@ public:
 	void add_layer(std::uint32_t size, ActivationFunction activation,
 								 const std::string &name = "") {
 		layers.emplace_back(size, activation, name);
+		trainable_nodes.reserve(1024);
 	}
 
 	template <typename Opt, typename... OptimizerArgs>
@@ -63,13 +64,13 @@ public:
 		output = current_layer;
 
 		auto y = add_placeholder("Y");
-		auto neg = add_node<Neg<T>>(y);
-		auto diff = add_node<Add<T>>(output, neg);
-		auto squared_diff = add_node<Hadamard<T>>(diff, diff);
-		auto sum_squared = add_node<SumAxis<T>>(squared_diff, 0);
-		// auto mean_loss =
-		//		add_node<Div<T>>(sum_squared, static_cast<T>(layers.back().size));
-		loss = sum_squared;
+		loss = add_node<MSELoss<T>>(output, y);
+
+		for (auto &node : nodes) {
+			if (auto n = dynamic_cast<Var *>(node.get()); n != nullptr) {
+				trainable_nodes.push_back(n);
+			}
+		}
 	}
 
 	auto predict(const Mat &input_matrix) {
@@ -85,8 +86,10 @@ public:
 		get_placeholder("Y")->set_value(labels);
 		auto l = loss->forward();
 		Mat grad(1, 1, arma::fill::ones);
-		(void)output->backward(grad);
+		output->backward(grad);
+
 		optimizer->step(std::span(trainable_nodes));
+
 		traverse([](Node<T> &node) { node.zero_gradient(); });
 		return l;
 	}
