@@ -1,0 +1,84 @@
+services:
+    training:
+        build:
+            context: .
+            dockerfile: ExGraf/Dockerfile.cpp
+        container_name: exgraf_training
+        networks:
+            - exgraf_network
+        depends_on:
+            - rabbitmq
+        environment:
+            RABBITMQ_USER: ${RABBITMQ_USER}
+            RABBITMQ_PASS: ${RABBITMQ_PASS}
+        command:
+            [
+                "/app/trainer",
+                "--user",
+                "${RABBITMQ_USER}",
+                "--password",
+                "${RABBITMQ_PASS}",
+                "--host",
+                "rabbitmq",
+                "--port",
+                "5672",
+            ]
+
+    metrics_consumer:
+        build:
+            context: .
+            dockerfile: MetricsSubscriber/Dockerfile.dotnet
+        container_name: exgraf_metrics_consumer
+        networks:
+            - exgraf_network
+        depends_on:
+            - rabbitmq
+            - postgres
+        environment:
+            ASPNETCORE_ENVIRONMENT: Development
+            RabbitMQ__Host: rabbitmq
+            RabbitMQ__Username: ${RABBITMQ_USER}
+            RabbitMQ__Password: ${RABBITMQ_PASS}
+            RabbitMQ__VirtualHost: "/"
+            ConnectionStrings__ModelPerformance: "Host=postgres;Port=5432;Database=ModelPerformance;Username=${POSTGRES_USER};Password=${POSTGRES_PASS}"
+
+    rabbitmq:
+        image: rabbitmq:3-management
+        container_name: exgraf_rabbitmq
+        ports:
+            - "5672:5672"
+            - "15672:15672"
+        networks:
+            - exgraf_network
+        volumes:
+            - rabbitmq_data:/var/lib/rabbitmq
+        environment:
+            - RABBITMQ_DEFAULT_USER=${RABBITMQ_USER}
+            - RABBITMQ_DEFAULT_PASS=${RABBITMQ_PASS}
+        healthcheck:
+            test: ["CMD", "rabbitmq-diagnostics", "check_port_connectivity"]
+            interval: 10s
+            timeout: 5s
+            retries: 3
+
+    postgres:
+        image: postgres:12
+        container_name: exgraf_postgres
+        ports:
+            - "5432:5432"
+        networks:
+            - exgraf_network
+        volumes:
+            - postgres_data:/var/lib/postgresql/data
+        environment:
+            POSTGRES_USER: ${POSTGRES_USER}
+            POSTGRES_PASSWORD: ${POSTGRES_PASS}
+            POSTGRES_DB: ModelPerformance
+
+networks:
+    exgraf_network:
+        driver: bridge
+
+volumes:
+    rabbitmq_data:
+    postgres_data:

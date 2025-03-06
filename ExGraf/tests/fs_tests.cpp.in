@@ -1,0 +1,113 @@
+#include "exgraf/loaders/mnist.hpp"
+#include <armadillo>
+#include <cstdlib>
+#include <doctest/doctest.h>
+#include <filesystem>
+#include <fstream>
+
+namespace fs = std::filesystem;
+
+std::string create_temp_test_directory() {
+	fs::path temp_dir = fs::temp_directory_path() / "exgraf_test_mnist";
+	fs::create_directories(temp_dir);
+	return temp_dir.string();
+}
+
+void create_binary_file(const std::string &path,
+												const std::vector<std::uint8_t> &content) {
+	std::ofstream file(path, std::ios::binary);
+	file.write(reinterpret_cast<const char *>(content.data()),
+						 static_cast<std::int64_t>(content.size()));
+}
+
+TEST_CASE("FS::read_file") {
+	auto temp_dir = create_temp_test_directory();
+
+	SUBCASE("Successfully reads existing file") {
+		std::string test_path = temp_dir + "/test_file.bin";
+		std::vector<std::uint8_t> test_data = {0x01, 0x02, 0x03, 0x04};
+
+		create_binary_file(test_path, test_data);
+
+		auto result = ExGraf::FS::read_file(test_path);
+		CHECK(result == test_data);
+	}
+
+	SUBCASE("Throws when file doesn't exist") {
+		std::string nonexistent_path = temp_dir + "/nonexistent_file.bin";
+		CHECK_THROWS_AS(ExGraf::FS::read_file(nonexistent_path),
+										std::runtime_error);
+	}
+}
+
+TEST_CASE("FS::parse_int") {
+	std::vector<std::uint8_t> data = {0x01, 0x02, 0x03, 0x04};
+
+	CHECK(ExGraf::FS::parse_int(data, 0) == 0x01020304);
+}
+
+TEST_CASE("FS::decode_images") {
+	std::vector<std::uint8_t> image_data = {
+			0x00, 0x00, 0x08, 0x03, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x02,
+			0x00, 0x00, 0x00, 0x02, 0x00, 0xFF, 0x7F, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE,
+	};
+
+	arma::Mat<double> images;
+	ExGraf::FS::decode_images(image_data, images);
+
+	CHECK(images.n_rows == 4);
+	CHECK(images.n_cols == 2);
+
+	CHECK(images(0, 0) == doctest::Approx(0.0));
+	CHECK(images(1, 0) == doctest::Approx(1.0));
+	CHECK(images(2, 0) == doctest::Approx(0.5).epsilon(0.01));
+	CHECK(images(3, 0) == doctest::Approx(0.67).epsilon(0.01));
+
+	CHECK(images(0, 1) == doctest::Approx(0.73).epsilon(0.01));
+	CHECK(images(1, 1) == doctest::Approx(0.8).epsilon(0.01));
+	CHECK(images(2, 1) == doctest::Approx(0.87).epsilon(0.01));
+	CHECK(images(3, 1) == doctest::Approx(0.93).epsilon(0.01));
+}
+
+TEST_CASE("FS::decode_labels") {
+	std::vector<std::uint8_t> label_data = {
+			0x00, 0x00, 0x08, 0x01, 0x00, 0x00, 0x00, 0x03, 0x05, 0x09, 0x01,
+	};
+
+	arma::Mat<double> labels;
+	ExGraf::FS::decode_labels(label_data, labels);
+
+	CHECK(labels.n_rows == 10);
+	CHECK(labels.n_cols == 3);
+
+	CHECK(labels(5, 0) == 1.0);
+	CHECK(labels(9, 1) == 1.0);
+	CHECK(labels(1, 2) == 1.0);
+
+	CHECK(labels(0, 0) == 0.0);
+	CHECK(labels(1, 0) == 0.0);
+	CHECK(labels(2, 0) == 0.0);
+}
+
+TEST_CASE("FS::decompress_gzip") {
+	auto temp_dir = create_temp_test_directory();
+	std::string test_file = temp_dir + "/test_gzip.gz";
+
+	std::string cmd = "echo 'hello world' | gzip > " + test_file;
+	auto res = system(cmd.c_str());
+	(void)res;
+	auto compressed_data = ExGraf::FS::read_file(test_file);
+
+	auto decompressed_data = ExGraf::FS::decompress_gzip(compressed_data);
+
+	std::string result(decompressed_data.begin(), decompressed_data.end());
+
+	CHECK(result.find("hello world") != std::string::npos);
+}
+
+#define TEST_RESOURCE_PATH "@CMAKE_BINARY_DIR@/test_resources"
+
+TEST_CASE("Resource directory exists") {
+	CHECK(fs::exists(TEST_RESOURCE_PATH));
+	CHECK(fs::is_directory(TEST_RESOURCE_PATH));
+}
